@@ -1003,21 +1003,54 @@ function setFlt(f){FLT=f;[['all','all'],['norm','norm'],['div','div'],['high','h
 function setSort(s){SORT=s;document.getElementById('s-val').className='stab'+(s==='val'?' on':'');document.getElementById('s-pnl').className='stab'+(s==='pnl'?' on':'');renderList();}
 
 /* ════════════ 검색 드롭다운 (이벤트 위임) ════════════ */
-let SRCH=[];
-function doSearch(q){
+let SRCH=[], _srchTimer=null;
+
+function renderDD(results){
   const dd=document.getElementById('srch-dd');
-  if(!q||!q.trim()){dd.className='srch-dd';dd.innerHTML='';SRCH=[];return;}
-  const ql=q.toLowerCase().replace(/\s+/g,'');
-  SRCH=DB.filter(x=>x.n.toLowerCase().replace(/\s+/g,'').includes(ql)||x.s.toLowerCase().includes(ql)).slice(0,20);
-  if(!SRCH.length){dd.className='srch-dd';dd.innerHTML='';return;}
-  dd.innerHTML=SRCH.map((x,i)=>`<div class="dd-item" data-i="${i}"><div class="dd-nm">${x.n}</div><div class="dd-sub">${x.s} · ${x.isDv?'배당 '+x.dy+'% · '+x.df:'배당없음'}</div></div>`).join('');
+  if(!results.length){dd.className='srch-dd';dd.innerHTML='';return;}
+  dd.innerHTML=results.map((x,i)=>`<div class="dd-item" data-i="${i}">
+    <div class="dd-nm">${x.n}${x.isDv&&x.dy>=3?`<span style="font-size:10px;padding:1px 5px;border-radius:4px;background:${x.dy>=10?'#fff7ed':'#f0fdf4'};color:${x.dy>=10?'#d97706':'#16a34a'};margin-left:4px">${x.dy>=10?'고배당':'배당주'}</span>`:''}</div>
+    <div class="dd-sub">${x.s}${x.isDv&&x.dy>0?' · 배당 '+x.dy+'% · '+x.df:x.fromApi?' · 미국주식/ETF':' · 배당없음'}</div>
+  </div>`).join('');
   dd.className='srch-dd show';
 }
-function closeDD(){const dd=document.getElementById('srch-dd');if(dd){dd.className='srch-dd';dd.innerHTML='';}SRCH=[];}
-function pickResult(x){
-  document.getElementById('srch-inp').value=x.n;
-  document.getElementById('f-avg').focus();
-  closeDD();
+
+async function searchFinnhub(q){
+  try{
+    const r=await fetch(`https://finnhub.io/api/v1/search?q=${encodeURIComponent(q)}&token=${FKEY}`);
+    if(!r.ok)return[];
+    const j=await r.json();
+    return(j.result||[])
+      .filter(x=>x.type==='ETP'||x.type==='Common Stock'||x.type==='ETF')
+      .filter(x=>!x.symbol.includes('.'))
+      .slice(0,10)
+      .map(x=>({n:x.description||x.displaySymbol,s:x.symbol,dy:0,df:'없음',isDv:false,fromApi:true}));
+  }catch{return[];}
+}
+
+function doSearch(q){
+  const dd=document.getElementById('srch-dd');
+  if(!q||!q.trim()){dd.className='srch-dd';dd.innerHTML='';SRCH=[];if(_srchTimer)clearTimeout(_srchTimer);return;}
+  const ql=q.toLowerCase().replace(/\s+/g,'');
+  const local=DB.filter(x=>x.n.toLowerCase().replace(/\s+/g,'').includes(ql)||x.s.toLowerCase().includes(ql)).slice(0,15);
+  SRCH=[...local];
+  if(SRCH.length)renderDD(SRCH);
+  else{dd.innerHTML=`<div style="padding:12px 14px;font-size:12px;color:#aaa;text-align:center"><span class="spin-sm"></span> 검색 중...</div>`;dd.className='srch-dd show';}
+  if(_srchTimer)clearTimeout(_srchTimer);
+  _srchTimer=setTimeout(async()=>{
+    const api=await searchFinnhub(q);
+    const localSyms=new Set(local.map(x=>x.s.toUpperCase()));
+    const merged=[...local,...api.filter(x=>!localSyms.has(x.s.toUpperCase()))].slice(0,20);
+    SRCH=merged;
+    if(SRCH.length)renderDD(SRCH);
+    else{dd.innerHTML=`<div style="padding:12px 14px;font-size:12px;color:#aaa;text-align:center">검색 결과 없음</div>`;dd.className='srch-dd show';}
+  },400);
+}
+function closeDD(){
+  const dd=document.getElementById('srch-dd');
+  if(dd){dd.className='srch-dd';dd.innerHTML='';}
+  SRCH=[];
+  if(_srchTimer){clearTimeout(_srchTimer);_srchTimer=null;}
 }
 /* 이벤트 위임 초기화 */
 function initDD(){
@@ -1068,8 +1101,9 @@ async function submitAdd(){
   const qty=parseInt(document.getElementById('f-qty').value);
   const dt=document.getElementById('f-date').value;
   if(!nm||!avg||!qty){alert('종목명, 평단가, 수량을 입력해주세요');return;}
-  const dbI=DB.find(x=>x.n===nm);
-  const sym=dbI?dbI.s:toSym(nm);
+  /* DB 또는 직접 입력 심볼 */
+  const dbI=DB.find(x=>x.n===nm||x.s.toUpperCase()===nm.toUpperCase());
+  const sym=dbI?dbI.s:(nm.match(/^[A-Z]{1,5}$/)?nm.toUpperCase():toSym(nm));
   const dy=dbI?dbI.dy:0,df=dbI?dbI.df:'없음';
   const id=Date.now();
   D.h.push({id,n:nm,sym,avg,avgCost:avg,qty,cur:avg,dy,df,isDv:dy>0,acct:CUR_ACCT,buyDate:dt,err:0,
