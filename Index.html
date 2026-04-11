@@ -287,6 +287,12 @@ const DB=[
 function ld(){try{return JSON.parse(localStorage.getItem('pf9'))||{h:[],rate:1480,at:''};}catch{return{h:[],rate:1480,at:''}}}
 function sv(){localStorage.setItem('pf9',JSON.stringify(D))}
 let D=ld(),TAB='hold',FLT='a',SORT='v',BUSY=false,LDS=new Set();
+/* DB 종목은 dy를 DB 기본값으로 리셋 (특별배당 등으로 왜곡된 값 보정) */
+D.h=D.h.map(h=>{
+  const dbI=DB.find(x=>x.s===h.sym||x.n===h.n);
+  if(dbI&&dbI.dy>0)return{...h,dy:dbI.dy,df:dbI.df};
+  return h;
+});
 let DID=null,SBUY=false,CACCT='n';
 
 /* ── 유틸 ── */
