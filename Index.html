@@ -861,33 +861,81 @@ function renderSim(){
   ['배당주 평가금액',fmt(tD),'#0891b2']
 ].map(([l,v,c])=>`<div class="sim-card"><div class="sim-lbl">${l}</div><div class="sim-val" style="color:${c}">${v}</div></div>`).join('')}</div>
 
-${hasBoth?`<div class="ccard">
-  <div class="cttl">계좌별 배당 분리</div>
-  ${normSS.length?`<div class="drow">
-    <div style="min-width:0">
-      <div style="font-size:13px;font-weight:600;color:#4f46e5">일반계좌</div>
-      <div style="font-size:11px;color:#aaa">${normSS.length}종목 · ${isPost?'세후 -15.4%':'세전'}</div>
-    </div>
-    <div style="text-align:right;flex-shrink:0">
-      <div style="font-size:14px;font-weight:700;color:#d97706">${fmt(normMon)}/월</div>
-      <div style="font-size:11px;color:#aaa">연 ${fmt(normSS.reduce((s,x)=>s+(isPost?x.annAfter:x.ann),0))}</div>
-    </div>
-  </div>`:''}
-  ${taxSS.length?`<div class="drow">
-    <div style="min-width:0">
-      <div style="font-size:13px;font-weight:600;color:#16a34a">절세계좌 (ISA/IRP)</div>
-      <div style="font-size:11px;color:#aaa">${taxSS.length}종목 · 세금 0%</div>
-    </div>
-    <div style="text-align:right;flex-shrink:0">
-      <div style="font-size:14px;font-weight:700;color:#d97706">${fmt(taxMon)}/월</div>
-      <div style="font-size:11px;color:#aaa">연 ${fmt(taxSS.reduce((s,x)=>s+x.ann,0))}</div>
-    </div>
-  </div>`:''}
-  <div style="margin-top:8px;padding-top:8px;border-top:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center">
-    <span style="font-size:13px;font-weight:700">합계</span>
-    <span style="font-size:15px;font-weight:700;color:#4f46e5">${fmt(tMon)}/월</span>
+<div class="ccard">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+    <div class="cttl" style="margin-bottom:0">계좌별 세전 → 세후</div>
   </div>
-</div>`:''}
+
+  ${normSS.length?`
+  <div style="background:#eef2ff;border-radius:10px;padding:12px 14px;margin-bottom:8px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div style="font-size:13px;font-weight:700;color:#4f46e5">일반계좌</div>
+      <div style="font-size:11px;color:#4f46e5">${normSS.length}종목 · 배당세 15.4%</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <div style="flex:1;background:#fff;border-radius:8px;padding:8px 10px;text-align:center">
+        <div style="font-size:10px;color:#888;margin-bottom:2px">세전</div>
+        <div style="font-size:14px;font-weight:700;color:#1c1c1e">${fmt(normSS.reduce((s,x)=>s+x.mon,0))}</div>
+        <div style="font-size:10px;color:#aaa">/월</div>
+      </div>
+      <div style="font-size:16px;color:#aaa">→</div>
+      <div style="flex:1;background:#fff;border-radius:8px;padding:8px 10px;text-align:center">
+        <div style="font-size:10px;color:#888;margin-bottom:2px">세후</div>
+        <div style="font-size:14px;font-weight:700;color:#dc2626">${fmt(normSS.reduce((s,x)=>s+x.monAfter,0))}</div>
+        <div style="font-size:10px;color:#aaa">/월</div>
+      </div>
+      <div style="flex-shrink:0;text-align:center">
+        <div style="font-size:10px;color:#dc2626;font-weight:600">-15.4%</div>
+        <div style="font-size:11px;color:#dc2626;font-weight:700">-${fmt(normSS.reduce((s,x)=>s+(x.mon-x.monAfter),0))}</div>
+      </div>
+    </div>
+  </div>`:''}
+
+  ${taxSS.length?`
+  <div style="background:#f0fdf4;border-radius:10px;padding:12px 14px;margin-bottom:8px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div style="font-size:13px;font-weight:700;color:#16a34a">절세계좌 (ISA/IRP)</div>
+      <div style="font-size:11px;color:#16a34a">${taxSS.length}종목 · 배당세 0%</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <div style="flex:1;background:#fff;border-radius:8px;padding:8px 10px;text-align:center">
+        <div style="font-size:10px;color:#888;margin-bottom:2px">세전</div>
+        <div style="font-size:14px;font-weight:700;color:#1c1c1e">${fmt(taxSS.reduce((s,x)=>s+x.mon,0))}</div>
+        <div style="font-size:10px;color:#aaa">/월</div>
+      </div>
+      <div style="font-size:16px;color:#aaa">→</div>
+      <div style="flex:1;background:#fff;border-radius:8px;padding:8px 10px;text-align:center">
+        <div style="font-size:10px;color:#888;margin-bottom:2px">세후</div>
+        <div style="font-size:14px;font-weight:700;color:#16a34a">${fmt(taxSS.reduce((s,x)=>s+x.mon,0))}</div>
+        <div style="font-size:10px;color:#aaa">/월</div>
+      </div>
+      <div style="flex-shrink:0;text-align:center">
+        <div style="font-size:10px;color:#16a34a;font-weight:600">절세</div>
+        <div style="font-size:11px;color:#16a34a;font-weight:700">0원</div>
+      </div>
+    </div>
+  </div>`:''}
+
+  <div style="background:#f9f9f9;border-radius:10px;padding:12px 14px">
+    <div style="display:flex;align-items:center;gap:8px">
+      <div style="flex:1;text-align:center">
+        <div style="font-size:10px;color:#888;margin-bottom:2px">합계 세전</div>
+        <div style="font-size:15px;font-weight:700;color:#1c1c1e">${fmt(tMonPre)}</div>
+        <div style="font-size:10px;color:#aaa">/월</div>
+      </div>
+      <div style="font-size:16px;color:#aaa">→</div>
+      <div style="flex:1;text-align:center">
+        <div style="font-size:10px;color:#888;margin-bottom:2px">합계 세후</div>
+        <div style="font-size:15px;font-weight:700;color:#4f46e5">${fmt(tMonPost)}</div>
+        <div style="font-size:10px;color:#aaa">/월</div>
+      </div>
+      <div style="flex-shrink:0;text-align:center">
+        <div style="font-size:10px;color:#888">실수령</div>
+        <div style="font-size:12px;font-weight:700;color:#d97706">${(tMonPre>0?(tMonPost/tMonPre*100):100).toFixed(1)}%</div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <div class="ccard"><div class="cttl">종목별 배당</div>${ss.map(x=>{
   const mon=isPost?x.monAfter:x.mon;
