@@ -299,7 +299,7 @@ function ab(n){const r=n.replace(/\s+/g,'');return(r.length<=3?r:r.slice(0,2)).t
 function ci(id){return Math.max(0,D.h.findIndex(x=>x.id===id))}
 function tax(h){return(h.acct==='i'||h.acct==='r')?0:0.154}
 function korDate(){return new Date(Date.now()+9*3600000).toISOString().split('T')[0]}
-function dvCat(dy){return dy>=10?'h':dy>=3?'d':'n'}
+function dvCat(dy){return dy>=10?'h':dy>=4?'d':'n'}
 
 /* ── 가격 API ── */
 const PX=[u=>'https://corsproxy.io/?'+encodeURIComponent(u),u=>'https://api.allorigins.win/raw?url='+encodeURIComponent(u),u=>'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(u)];
@@ -384,10 +384,10 @@ function render(){
   const tv=H.reduce((s,h)=>(h.cur||h.avg)*h.qty+s,0);
   const tc=H.reduce((s,h)=>h.avgCost*h.qty+s,0);
   const pnl=tv-tc,pct=tc>0?pnl/tc*100:0;
-  const dv=H.filter(h=>h.dy>=3);
+  const dv=H.filter(h=>h.dy>=4);
   const md=dv.reduce((s,h)=>{const a=(h.cur||h.avg)*h.qty*h.dy/100*(1-tax(h));return s+a/dvN(h.df);},0);
   const nv=H.filter(h=>h.dy<3).reduce((s,h)=>(h.cur||h.avg)*h.qty+s,0);
-  const dval=H.filter(h=>h.dy>=3&&h.dy<10).reduce((s,h)=>(h.cur||h.avg)*h.qty+s,0);
+  const dval=H.filter(h=>h.dy>=4&&h.dy<10).reduce((s,h)=>(h.cur||h.avg)*h.qty+s,0);
   const hval=H.filter(h=>h.dy>=10).reduce((s,h)=>(h.cur||h.avg)*h.qty+s,0);
 
   document.getElementById('h-total').textContent=fmt(tv);
@@ -400,7 +400,7 @@ function render(){
   document.getElementById('h-upd').textContent=D.at?`업데이트 ${D.at} · USD/KRW ${fN(D.rate)}원`:'';
   document.getElementById('s-empty').style.display=H.length?'none':'block';
 
-  let fil=H.filter(h=>FLT==='a'?true:FLT==='h'?h.dy>=10:FLT==='d'?(h.dy>=3&&h.dy<10):h.dy<3);
+  let fil=H.filter(h=>FLT==='a'?true:FLT==='h'?h.dy>=10:FLT==='d'?(h.dy>=4&&h.dy<10):h.dy<4);
   if(SORT==='v')fil=[...fil].sort((a,b)=>(b.cur||b.avg)*b.qty-(a.cur||a.avg)*a.qty);
   else fil=[...fil].sort((a,b)=>((b.cur||b.avg)-b.avgCost)*b.qty-((a.cur||a.avg)-a.avgCost)*a.qty);
 
@@ -758,7 +758,7 @@ function setSort(s){SORT=s;document.getElementById('s-v').className='stab'+(s===
 
 /* ── 검색 드롭다운 ── */
 let SRCH=[],_sid=0,_stimer=null;
-function renderDD(r){const dd=document.getElementById('srch-dd');if(!r||!r.length){dd.className='srch-dd';dd.innerHTML='';return;}dd.innerHTML=r.map((x,i)=>`<div class="dd-item" data-i="${i}"><div class="dd-nm">${x.n}${x.dy>=10?`<span class="bdg" style="background:#fff7ed;color:#d97706">고배당</span>`:x.dy>=3?`<span class="bdg" style="background:#f0fdf4;color:#16a34a">배당주</span>`:''}</div><div class="dd-sub">${x.s}${x.dy>0?' · 배당 '+x.dy+'% · '+x.df:x.api?' · 미국주식/ETF':' · 배당없음'}</div></div>`).join('');dd.className='srch-dd on';}
+function renderDD(r){const dd=document.getElementById('srch-dd');if(!r||!r.length){dd.className='srch-dd';dd.innerHTML='';return;}dd.innerHTML=r.map((x,i)=>`<div class="dd-item" data-i="${i}"><div class="dd-nm">${x.n}${x.dy>=10?`<span class="bdg" style="background:#fff7ed;color:#d97706">고배당</span>`:x.dy>=4?`<span class="bdg" style="background:#f0fdf4;color:#16a34a">배당주</span>`:''}</div><div class="dd-sub">${x.s}${x.dy>0?' · 배당 '+x.dy+'% · '+x.df:x.api?' · 미국주식/ETF':' · 배당없음'}</div></div>`).join('');dd.className='srch-dd on';}
 async function fhSearch(q){try{const r=await fetch(`https://finnhub.io/api/v1/search?q=${encodeURIComponent(q)}&token=${FK}`);if(!r.ok)return[];const j=await r.json();return(j.result||[]).filter(x=>['ETP','Common Stock','ETF'].includes(x.type)&&!x.symbol.includes('.')).slice(0,10).map(x=>({n:x.description||x.displaySymbol,s:x.symbol,dy:0,df:'없음',api:true}));}catch{return[];}}
 function doSearch(q){
   const dd=document.getElementById('srch-dd');
