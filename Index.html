@@ -206,22 +206,40 @@ body{font-family:-apple-system,'Helvetica Neue',sans-serif;background:#f2f2f7;co
 <div class="ovm" id="addOv" onclick="if(event.target===this)this.classList.remove('show')">
 <div class="modal" onclick="event.stopPropagation()">
   <div class="mt">종목 추가</div>
+
+  <!-- 계좌 유형 상단 선택 -->
+  <div style="display:flex;gap:8px;margin-bottom:16px">
+    <button id="acctNormal" onclick="setModalAcct('normal')"
+      style="flex:1;padding:12px 0;border-radius:10px;border:2px solid #4f46e5;background:#4f46e5;color:#fff;font-size:14px;font-weight:700;cursor:pointer">
+      일반계좌
+    </button>
+    <button id="acctIsa" onclick="setModalAcct('isa')"
+      style="flex:1;padding:12px 0;border-radius:10px;border:2px solid #e0e0e0;background:#fff;color:#888;font-size:14px;font-weight:600;cursor:pointer">
+      ISA
+    </button>
+    <button id="acctIrp" onclick="setModalAcct('irp')"
+      style="flex:1;padding:12px 0;border-radius:10px;border:2px solid #e0e0e0;background:#fff;color:#888;font-size:14px;font-weight:600;cursor:pointer">
+      IRP
+    </button>
+  </div>
+  <div id="acctHint" style="font-size:11px;color:#888;text-align:center;margin:-10px 0 14px;"></div>
+
   <div class="fg srch-wrap">
     <div class="fl">종목명</div>
-    <div class="iw"><input class="inp" id="aName" placeholder="삼성전자, JEPQ, KODEX…" autocomplete="off" oninput="doSrch(this.value)" onblur="setTimeout(closeSrchDD,150)"></div>
+    <div class="iw"><input class="inp" id="aName" placeholder="삼성전자, JEPQ, KODEX…" autocomplete="off" oninput="doSrch(this.value)" onblur="setTimeout(closeSrchDD,100)"></div>
     <div class="srch-dd" id="srchDD"></div>
   </div>
   <div class="fr">
     <div class="fg"><div class="fl">평균 매수가 *</div><div class="iw"><input class="inp" id="aAvg" type="number" inputmode="numeric" placeholder="50000"><span class="suf">원</span></div></div>
     <div class="fg"><div class="fl">수량 *</div><div class="iw"><input class="inp" id="aQty" type="number" inputmode="numeric" placeholder="100"><span class="suf">주</span></div></div>
   </div>
-  <div class="fr">
-    <div class="fg"><div class="fl">매수 날짜</div><div class="iw"><input class="inp" id="aBuyDate" type="date" style="color:#1c1c1e"></div></div>
-    <div class="fg"><div class="fl">계좌 유형</div><div class="iw"><select class="inp" id="aAcct" style="-webkit-appearance:auto;appearance:auto"><option value="normal">일반계좌</option><option value="isa">ISA (절세)</option><option value="irp">IRP (절세)</option></select></div></div>
+  <div class="fg">
+    <div class="fl">매수 날짜</div>
+    <div class="iw"><input class="inp" id="aBuyDate" type="date" style="color:#1c1c1e"></div>
   </div>
   <div class="hint">추가 즉시 실시간 가격을 자동 조회합니다.<br>배당수익률은 추가 후 상세페이지에서 설정할 수 있어요.</div>
   <div class="mbtns">
-    <button class="bcn" onclick="document.getElementById('addOv').classList.remove('show')">취소</button>
+    <button class="bcn" onclick="closeAddModal()">취소</button>
     <button class="bsb" onclick="addHolding()">추가하기</button>
   </div>
 </div>
@@ -789,17 +807,54 @@ function pickSrch(n,s,dy,df){
   document.getElementById('aName').value=n;
   document.getElementById('aDy').value=dy||'';
   document.getElementById('aDf').value=df||'없음';
-  closeSrchDD();
-  setTimeout(()=>document.getElementById('aAvg').focus(),10);
+  /* 즉시 닫기 */
+  const dd=document.getElementById('srchDD');
+  dd.className='srch-dd'; dd.innerHTML='';
+  document.getElementById('aAvg').focus();
 }
 document.addEventListener('click',e=>{if(!e.target.closest('.srch-wrap'))document.getElementById('srchDD').className='srch-dd';});
-function openAdd(){document.getElementById('addOv').classList.add('show');}
+let MODAL_ACCT='normal';
+function setModalAcct(v){
+  MODAL_ACCT=v;
+  const cfg={
+    normal:{label:'일반계좌',hint:'배당소득세 15.4% 부과'},
+    isa:{label:'ISA',hint:'비과세 한도 내 배당소득세 0%'},
+    irp:{label:'IRP',hint:'세액공제 혜택 · 55세 이후 수령'},
+  };
+  ['Normal','Isa','Irp'].forEach(k=>{
+    const btn=document.getElementById('acct'+k);
+    const isOn=v===k.toLowerCase();
+    btn.style.background=isOn?'#4f46e5':'#fff';
+    btn.style.color=isOn?'#fff':'#888';
+    btn.style.borderColor=isOn?'#4f46e5':'#e0e0e0';
+  });
+  document.getElementById('acctHint').textContent=cfg[v].hint;
+}
+function getKoreanDateStr(){
+  const now=new Date();
+  const kst=new Date(now.getTime()+9*60*60*1000);
+  return kst.toISOString().split('T')[0];
+}
+function openAdd(){
+  document.getElementById('addOv').classList.add('show');
+  document.getElementById('aBuyDate').value=getKoreanDateStr();
+  setModalAcct('normal');
+  document.getElementById('aName').value='';
+  document.getElementById('aAvg').value='';
+  document.getElementById('aQty').value='';
+  document.getElementById('aDy').value='';
+  closeSrchDD();
+}
+function closeAddModal(){
+  document.getElementById('addOv').classList.remove('show');
+  closeSrchDD();
+}
 async function addHolding(){
   const nm=document.getElementById('aName').value.trim();
   const avg=parseFloat(document.getElementById('aAvg').value);
   const qty=parseInt(document.getElementById('aQty').value);
   const buyDate=document.getElementById('aBuyDate').value;
-  const acct=document.getElementById('aAcct').value;
+  const acct=MODAL_ACCT||'normal';
   if(!nm||!avg||!qty){alert('종목명, 평단가, 수량을 입력해주세요');return;}
   const dbI=DB.find(x=>x.n===nm);
   const sym=dbI?dbI.s:toSym(nm);
