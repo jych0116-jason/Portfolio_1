@@ -1046,111 +1046,43 @@ function closeDD(){
   if(dd){dd.className='srch-dd';dd.innerHTML='';}
   SRCH=[];
 }
-/* 드롭다운 초기화 - flag 방식으로 blur/click 타이밍 충돌 방지 */
+/* 드롭다운 초기화 */
 let _ddPicking=false;
 function initDD(){
   const dd=document.getElementById('srch-dd');
   const inp=document.getElementById('srch-inp');
   if(!dd||!inp)return;
 
-  /* 드롭다운 아이템 클릭 시: flag 세우고 선택 */
-  dd.addEventListener('mousedown',function(e){
+  function selectItem(e){
     const item=e.target.closest('[data-i]');
-    if(item){
-      e.preventDefault(); /* input blur 방지 */
-      _ddPicking=true;
-      const x=SRCH[parseInt(item.getAttribute('data-i'))];
-      if(x){
-        pickResult(x);
-        _ddPicking=false;
-      }
-    }
-  });
+    if(!item)return;
+    e.preventDefault();
+    e.stopPropagation();
+    _ddPicking=true;
+    const x=SRCH[parseInt(item.getAttribute('data-i'))];
+    if(x) pickResult(x);
+    /* 약간의 딜레이 후 flag 해제 */
+    setTimeout(()=>{_ddPicking=false;},300);
+  }
 
-  /* input 입력 */
+  /* 터치(모바일) + 마우스(PC) 둘 다 처리 */
+  dd.addEventListener('touchstart', selectItem, {passive:false});
+  dd.addEventListener('mousedown', selectItem);
+
   inp.addEventListener('input',function(){doSearch(this.value);});
 
-  /* input blur - picking 중이면 닫지 않음 */
+  /* blur - _ddPicking이면 닫지 않음, 500ms 여유 */
   inp.addEventListener('blur',function(){
-    if(_ddPicking){_ddPicking=false;return;}
-    setTimeout(closeDD,200);
+    setTimeout(()=>{
+      if(!_ddPicking) closeDD();
+    },500);
   });
 
-  /* 외부 클릭으로 닫기 */
+  /* 외부 클릭 닫기 */
   document.addEventListener('click',function(e){
-    if(!dd.contains(e.target)&&e.target!==inp)closeDD();
+    if(!dd.contains(e.target)&&e.target!==inp) closeDD();
   });
+  document.addEventListener('touchstart',function(e){
+    if(!dd.contains(e.target)&&e.target!==inp) closeDD();
+  },{passive:true});
 }
-
-/* ════════════ 모달 ════════════ */
-function setAcct(v){
-  CUR_ACCT=v;
-  [['normal','norm'],['isa','isa'],['irp','irp']].forEach(([k,id])=>{
-    const b=document.getElementById('ab-'+id);
-    const on=k===v;
-    b.style.background=on?ACCT_C[k]:'#fff';
-    b.style.color=on?'#fff':'#888';
-    b.style.borderColor=on?ACCT_C[k]:'#e0e0e0';
-    b.style.fontWeight=on?'700':'600';
-  });
-  const hint=document.getElementById('acct-hint');
-  hint.textContent=ACCT_H[v];
-  hint.style.color=ACCT_C[v];
-}
-function openAddModal(){
-  document.getElementById('add-ov').classList.add('show');
-  document.getElementById('srch-inp').value='';
-  document.getElementById('f-avg').value='';
-  document.getElementById('f-qty').value='';
-  document.getElementById('f-date').value=korNow();
-  closeDD();
-  setAcct('normal');
-  setTimeout(()=>document.getElementById('srch-inp').focus(),100);
-}
-function closeAddModal(){document.getElementById('add-ov').classList.remove('show');closeDD();}
-document.getElementById('add-ov').addEventListener('click',function(e){if(e.target===this)closeAddModal();});
-
-async function submitAdd(){
-  const nm=document.getElementById('srch-inp').value.trim();
-  const avg=parseFloat(document.getElementById('f-avg').value);
-  const qty=parseInt(document.getElementById('f-qty').value);
-  const dt=document.getElementById('f-date').value;
-  if(!nm||!avg||!qty){alert('종목명, 평단가, 수량을 입력해주세요');return;}
-  /* DB 또는 직접 입력 심볼 */
-  const dbI=DB.find(x=>x.n===nm||x.s.toUpperCase()===nm.toUpperCase());
-  const sym=dbI?dbI.s:(nm.match(/^[A-Z]{1,5}$/)?nm.toUpperCase():toSym(nm));
-  const dy=dbI?dbI.dy:0,df=dbI?dbI.df:'없음';
-  const id=Date.now();
-  D.h.push({id,n:nm,sym,avg,avgCost:avg,qty,cur:avg,dy,df,isDv:true,acct:CUR_ACCT,buyDate:dt,err:0,
-    purchases:[{pid:Date.now(),date:dt,qty,avg,acct:CUR_ACCT}]});
-  saveD();closeAddModal();render();
-  if(!isKR(sym))await getRate();
-  await fetchPrice(id);
-  /* 배당주면 즉시 백그라운드 배당 조회 */
-  if(dy>0)fetchDivs(id);
-}
-
-/* ════════════ 로딩 ════════════ */
-let _gt=null;
-function showG(m){document.getElementById('gld').style.display='flex';setGMsg(m);if(_gt)clearTimeout(_gt);_gt=setTimeout(forceClose,30000);}
-function setGMsg(m){document.getElementById('g-msg').textContent=m;}
-function hideG(){document.getElementById('gld').style.display='none';if(_gt){clearTimeout(_gt);_gt=null;}}
-function forceClose(){hideG();BUSY=false;setBusy(false);LOADING.clear();render();}
-function setBusy(b){const btn=document.getElementById('rf-btn');if(btn)btn.style.animation=b?'spin .75s linear infinite':'none';}
-
-/* ════════════ 백그라운드 배당 조회 ════════════ */
-async function prefetchDivs(){
-  for(const h of D.h){
-    if(!h.divHistory||!h.divAt||(Date.now()-h.divAt)>86400000){
-      await fetchDivs(h.id);
-      await new Promise(r=>setTimeout(r,400));
-    }
-  }
-}
-
-render();
-initDD();
-setTimeout(prefetchDivs,1500);
-</script>
-</body>
-</html>
