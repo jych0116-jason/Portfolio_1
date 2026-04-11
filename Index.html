@@ -800,22 +800,57 @@ function renderDD(r){
 }
 
 async function krSearch(q){
-  /* Yahoo Finance 검색 - 한국 ETF/주식 이름+코드 반환 */
-  try{
-    const url='https://query1.finance.yahoo.com/v1/finance/search?q='+encodeURIComponent(q)+'&lang=ko&region=KR&quotesCount=15&newsCount=0&enableFuzzyQuery=true&enableCb=false';
-    const txt=await tout(Promise.any(PX.map(function(px){return fetch(px(url)).then(function(r){if(!r.ok)throw 0;return r.text();});})),5000);
-    const s=txt.includes('"contents"')?JSON.parse(txt).contents:txt;
-    const j=JSON.parse(s);
-    const quotes=(j&&j.quotes)||[];
-    return quotes
-      .filter(function(x){return x.symbol&&(x.symbol.endsWith('.KS')||x.symbol.endsWith('.KQ'));})
-      .slice(0,12)
-      .map(function(x){
-        const name=x.longname||x.shortname||x.symbol;
-        const dbI=DB.find(function(d){return d.s===x.symbol||d.n===name;});
-        return dbI?Object.assign({},dbI,{kr:true}):{n:name,s:x.symbol,dy:0,df:'없음',kr:true};
-      });
-  }catch(e){return[];}
+  /* 네이버 금융 검색 - 한국어 종목명 + 배당 내역 호환 심볼 */
+  const endpoints=[
+    'https://ac.finance.naver.com/ac?q='+encodeURIComponent(q)+'&q_enc=UTF-8&st=111&sug=1&u1=1&u2=1&u3=1&u4=1&r_format=json&limit=15',
+    'https://m.stock.naver.com/api/search/all?query='+encodeURIComponent(q)+'&page=1&pageSize=15',
+  ];
+  for(var ei=0;ei<endpoints.length;ei++){
+    try{
+      var url=endpoints[ei];
+      var txt=await tout(Promise.any(PX.map(function(px){return fetch(px(url)).then(function(r){if(!r.ok)throw 0;return r.text();});})),5000);
+      var raw=txt;
+      if(txt.includes('"contents"'))raw=JSON.parse(txt).contents;
+      var j=JSON.parse(raw);
+      var results=[];
+
+      /* 포맷 1: ac.finance.naver.com → {items:[[["코드","이름","타입"],...]]} */
+      if(j&&j.items&&j.items[0]&&j.items[0].length){
+        results=j.items[0].slice(0,12).map(function(it){
+          var code=String(it[0]),name=String(it[1]);
+          var sym=code+'.KS';
+          var dbI=DB.find(function(d){return d.s===sym||d.n===name;});
+          return dbI?Object.assign({},dbI,{kr:true}):{n:name,s:sym,dy:0,df:'없음',kr:true};
+        });
+      }
+
+      /* 포맷 2: m.stock.naver.com → {result:{d:[{cd,nm}]}} 또는 {stocks:[{itemCode,stockName}]} */
+      if(!results.length&&j&&j.result){
+        var arr=j.result.d||j.result.stocks||j.result.items||[];
+        results=arr.slice(0,12).map(function(it){
+          var code=it.cd||it.itemCode||it.code||'';
+          var name=it.nm||it.stockName||it.name||code;
+          var sym=code+'.KS';
+          var dbI=DB.find(function(d){return d.s===sym||d.n===name;});
+          return dbI?Object.assign({},dbI,{kr:true}):{n:name,s:sym,dy:0,df:'없음',kr:true};
+        }).filter(function(x){return x.n&&x.s!=='.KS';});
+      }
+
+      /* 포맷 3: 배열 직접 [{stockName,itemCode}] */
+      if(!results.length&&Array.isArray(j)){
+        results=j.slice(0,12).map(function(it){
+          var code=it.itemCode||it.code||it.cd||'';
+          var name=it.stockName||it.name||it.nm||code;
+          var sym=code+'.KS';
+          var dbI=DB.find(function(d){return d.s===sym||d.n===name;});
+          return dbI?Object.assign({},dbI,{kr:true}):{n:name,s:sym,dy:0,df:'없음',kr:true};
+        }).filter(function(x){return x.n&&x.s!=='.KS';});
+      }
+
+      if(results.length)return results;
+    }catch(e){}
+  }
+  return[];
 }
 
 
@@ -940,14 +975,13 @@ async function submitAdd(){
   const dt=document.getElementById('f-date').value;
   if(!nm||!avg||!qty){alert('종목명, 평단가, 수량을 입력해주세요');return;}
   /* DB에서 찾기 (이름 또는 심볼로) */
-  const nm6=nm.match(/^\d{6}$/);  /* 6자리 코드 직접 입력 */
-  const dbI=DB.find(x=>x.n===nm||x.s.toUpperCase()===nm.toUpperCase()||x.s.replace('.KS','').replace('.KQ','').toUpperCase()===nm.toUpperCase());
-  let sym,dy,df,displayName;
-  if(nm6){sym=nm+'.KS';dy=0;df='없음';displayName=nm;}  /* 코드 직접 */
-  else if(dbI){sym=dbI.s;dy=dbI.dy;df=dbI.df;displayName=dbI.n;}
-  else if(nm.match(/^[A-Z]{1,6}$/)){sym=nm;dy=0;df='없음';displayName=nm;}
-  else{sym=toSym(nm);dy=0;df='없음';displayName=nm;}
-  const finalName=displayName||nm;
+  /* 종목명으로 DB 찾기 */
+  const dbI=DB.find(x=>x.n===nm||x.s===nm||x.s.replace(/\.K[SQ]$/,'')=== nm);
+  let sym,dy,df,finalName;
+  if(dbI){sym=dbI.s;dy=dbI.dy;df=dbI.df;finalName=dbI.n;}
+  else if(/^\d{6}$/.test(nm)){sym=nm+'.KS';dy=0;df='없음';finalName=nm;}
+  else if(/^[A-Z0-9]{1,6}$/.test(nm)){sym=nm;dy=0;df='없음';finalName=nm;}
+  else{sym=toSym(nm);dy=0;df='없음';finalName=nm;}
   const id=Date.now();
   D.h.push({id,n:finalName,sym,avg,avgCost:avg,qty,cur:avg,dy,df,acct:CACCT,buyDate:dt,err:0,purchases:[{pid:id,date:dt,qty,avg,acct:CACCT}]});
   sv();closeAdd();render();
