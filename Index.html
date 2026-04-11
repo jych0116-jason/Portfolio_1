@@ -660,6 +660,51 @@ function renderDetail(id){
     }
   }
 
+  /* 매수 내역 섹션 */
+  const hm=migratePurchases(h);
+  if(hm.purchases&&hm.purchases.length!==h.purchases?.length){D.h=D.h.map(x=>x.id===id?hm:x);saveD();}
+  const purchases=(hm.purchases||[]).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const purchaseSec=`<div class="dcard">
+  <div class="dcard-ttl">매수 내역</div>
+  ${purchases.map(p=>{
+    const acColor=ACCT_C[p.acct||'normal'];
+    const isEditing=EDIT_PID===p.pid;
+    if(isEditing) return `<div style="background:#f9f9ff;border-radius:9px;padding:12px;margin-bottom:8px">
+      <div style="font-size:12px;font-weight:600;color:#4f46e5;margin-bottom:8px">매수 내역 수정</div>
+      <div style="display:flex;gap:7px;margin-bottom:7px">
+        <div style="flex:1"><div style="font-size:11px;color:#888;margin-bottom:3px">수량</div><input id="ep-qty" class="iinp" type="number" value="${p.qty}" style="width:100%"></div>
+        <div style="flex:1"><div style="font-size:11px;color:#888;margin-bottom:3px">단가</div><input id="ep-avg" class="iinp" type="number" value="${p.avg}" style="width:100%"></div>
+      </div>
+      <div style="display:flex;gap:7px;margin-bottom:9px">
+        <div style="flex:1"><div style="font-size:11px;color:#888;margin-bottom:3px">날짜</div><input id="ep-date" class="iinp" type="date" value="${p.date||''}" style="width:100%;color:#1c1c1e"></div>
+        <div style="flex:1"><div style="font-size:11px;color:#888;margin-bottom:3px">계좌</div>
+          <select id="ep-acct" class="isel" style="width:100%">
+            <option value="normal" ${(p.acct||'normal')==='normal'?'selected':''}>일반계좌</option>
+            <option value="isa" ${p.acct==='isa'?'selected':''}>ISA</option>
+            <option value="irp" ${p.acct==='irp'?'selected':''}>IRP</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;gap:7px">
+        <button onclick="saveEditPurchase(${id},${p.pid})" style="flex:2;padding:9px;border-radius:8px;border:none;background:#4f46e5;color:#fff;font-size:13px;font-weight:600;cursor:pointer">저장</button>
+        <button onclick="cancelEditPurchase(${id})" style="flex:1;padding:9px;border-radius:8px;border:1px solid #e0e0e0;background:#f5f5f5;font-size:13px;cursor:pointer">취소</button>
+        <button onclick="deletePurchase(${id},${p.pid})" style="flex:1;padding:9px;border-radius:8px;border:1px solid #fecaca;background:#fef2f2;font-size:13px;color:#dc2626;cursor:pointer">삭제</button>
+      </div>
+    </div>`;
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid #f5f5f5">
+      <div style="min-width:0">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          <span style="font-size:13px;font-weight:600">${fN(p.qty)}주</span>
+          <span style="font-size:12px;color:#555">@ ${fN(p.avg)}원</span>
+          <span style="font-size:10px;padding:1px 6px;border-radius:5px;background:${acColor}22;color:${acColor}">${ACCT_L[p.acct||'normal']}</span>
+        </div>
+        <div style="font-size:11px;color:#aaa;margin-top:2px">${p.date||'날짜 없음'} · 원금 ${fmt(p.qty*p.avg)}</div>
+      </div>
+      <button onclick="startEditPurchase(${id},${p.pid})" style="padding:5px 11px;border-radius:7px;border:1px solid #e0e0e0;background:#f5f5f5;font-size:12px;color:#555;cursor:pointer;flex-shrink:0;margin-left:8px">수정</button>
+    </div>`;
+  }).join('')}
+</div>`;
+
   document.getElementById('d-body').innerHTML=`
 <div style="display:flex;align-items:center;gap:14px;background:#fff;border-radius:14px;padding:16px;margin-bottom:12px;overflow:hidden">
   <div class="sico" style="background:${C[idx%C.length]};width:50px;height:50px;min-width:50px;font-size:15px">${abbr(h.n)}</div>
@@ -688,7 +733,7 @@ function renderDetail(id){
   <button class="act-btn btn-gray" onclick="SHOW_EDIT=!SHOW_EDIT;SHOW_BUY=false;renderDetail(${id})">${SHOW_EDIT?'취소':'✏️ 수정'}</button>
   <button class="act-btn btn-red" onclick="delH(${id})">삭제</button>
 </div>
-${buySec}${editSec}${divSec}`;
+${buySec}${editSec}${purchaseSec}${divSec}`;
 }
 function updPrev(id){
   const h=D.h.find(x=>x.id===id);if(!h)return;
@@ -704,7 +749,12 @@ function confirmBuy(id){
   const dt=document.getElementById('bd')?.value||'';
   const ac=document.getElementById('bac')?.value||'normal';
   if(!q||!a){alert('수량과 단가를 입력해주세요');return;}
-  D.h=D.h.map(h=>{if(h.id!==id)return h;const nq=h.qty+q,na=Math.round((h.avgCost*h.qty+a*q)/nq);return{...h,qty:nq,avgCost:na,avg:na,acct:ac};});
+  D.h=D.h.map(h=>{
+    if(h.id!==id)return h;
+    const nq=h.qty+q,na=Math.round((h.avgCost*h.qty+a*q)/nq);
+    const purchases=[...(h.purchases||[]),{pid:Date.now(),date:dt,qty:q,avg:a,acct:ac}];
+    return{...h,qty:nq,avgCost:na,avg:na,acct:ac,purchases};
+  });
   saveD();SHOW_BUY=false;renderDetail(id);render();
 }
 function saveEdit(id){
@@ -713,6 +763,44 @@ function saveEdit(id){
   const ac=document.getElementById('eac')?.value||'normal';
   D.h=D.h.map(x=>x.id===id?{...x,dy,df,isDv:dy>0,acct:ac}:x);
   saveD();SHOW_EDIT=false;renderDetail(id);render();
+}
+let EDIT_PID=null;
+function startEditPurchase(id,pid){
+  EDIT_PID=pid;renderDetail(id);
+}
+function cancelEditPurchase(id){EDIT_PID=null;renderDetail(id);}
+function saveEditPurchase(id,pid){
+  const q=parseInt(document.getElementById('ep-qty')?.value)||0;
+  const a=parseFloat(document.getElementById('ep-avg')?.value)||0;
+  const dt=document.getElementById('ep-date')?.value||'';
+  const ac=document.getElementById('ep-acct')?.value||'normal';
+  if(!q||!a){alert('수량과 단가를 입력해주세요');return;}
+  D.h=D.h.map(h=>{
+    if(h.id!==id)return h;
+    const purchases=(h.purchases||[]).map(p=>p.pid===pid?{...p,qty:q,avg:a,date:dt,acct:ac}:p);
+    const {qty,avgCost}=calcFromPurchases(purchases);
+    return{...h,purchases,qty,avgCost,avg:avgCost};
+  });
+  EDIT_PID=null;saveD();renderDetail(id);render();
+}
+function deletePurchase(id,pid){
+  const h=D.h.find(x=>x.id===id);
+  if(!h)return;
+  const purchases=(h.purchases||[]).filter(p=>p.pid!==pid);
+  if(!purchases.length){if(!confirm('마지막 매수 내역입니다. 종목을 삭제할까요?'))return;delH(id);return;}
+  const {qty,avgCost}=calcFromPurchases(purchases);
+  D.h=D.h.map(x=>x.id===id?{...x,purchases,qty,avgCost,avg:avgCost}:x);
+  EDIT_PID=null;saveD();renderDetail(id);render();
+}
+function calcFromPurchases(purchases){
+  const qty=purchases.reduce((s,p)=>s+p.qty,0);
+  const avgCost=qty>0?Math.round(purchases.reduce((s,p)=>s+p.avg*p.qty,0)/qty):0;
+  return{qty,avgCost};
+}
+function migratePurchases(h){
+  if(h.purchases&&h.purchases.length)return h;
+  const purchases=[{pid:h.id,date:h.buyDate||'',qty:h.qty,avg:h.avgCost,acct:h.acct||'normal'}];
+  return{...h,purchases};
 }
 function delH(id){
   const h=D.h.find(x=>x.id===id);
@@ -938,7 +1026,8 @@ async function submitAdd(){
   const sym=dbI?dbI.s:toSym(nm);
   const dy=dbI?dbI.dy:0,df=dbI?dbI.df:'없음';
   const id=Date.now();
-  D.h.push({id,n:nm,sym,avg,avgCost:avg,qty,cur:avg,dy,df,isDv:dy>0,acct:CUR_ACCT,buyDate:dt,err:0});
+  D.h.push({id,n:nm,sym,avg,avgCost:avg,qty,cur:avg,dy,df,isDv:dy>0,acct:CUR_ACCT,buyDate:dt,err:0,
+    purchases:[{pid:Date.now(),date:dt,qty,avg,acct:CUR_ACCT}]});
   saveD();closeAddModal();render();
   if(!isKR(sym))await getRate();
   await fetchPrice(id);
