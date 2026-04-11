@@ -373,6 +373,48 @@ const DB=[
   {n:'META',s:'META',dy:0.4,df:'분기배당'},
 ];
 
+/* ── 전체 종목 DB (캐시) ── */
+let FULL_DB=[]; /* 네이버 전체 종목 캐시 */
+
+async function loadFullDB(){
+  /* 24시간 캐시 확인 */
+  try{
+    const cached=localStorage.getItem('krDB');
+    if(cached){
+      const obj=JSON.parse(cached);
+      if(obj.at&&Date.now()-obj.at<86400000){FULL_DB=obj.data;return;}
+    }
+  }catch{}
+
+  /* 코스피 + 코스닥 + ETF 전체 로드 */
+  const markets=['KOSPI','KOSDAQ','ETF'];
+  const all=[];
+  for(const mkt of markets){
+    for(let page=1;page<=20;page++){
+      try{
+        const url='https://m.stock.naver.com/api/stocks/marketValue/'+mkt+'?page='+page+'&pageSize=100';
+        const txt=await tout(Promise.any(PX.map(function(px){return fetch(px(url)).then(function(r){if(!r.ok)throw 0;return r.text();});})),5000);
+        const raw=txt.includes('"contents"')?JSON.parse(txt).contents:txt;
+        const j=JSON.parse(raw);
+        const stocks=(j&&(j.stocks||j.result||j.data))||[];
+        if(!stocks.length)break;
+        stocks.forEach(function(x){
+          const code=x.itemCode||x.stockCode||x.cd||'';
+          const name=x.stockName||x.itemName||x.nm||'';
+          if(code&&name)all.push({n:name,s:code+'.KS',dy:0,df:'없음',kr:true});
+        });
+        if(stocks.length<100)break; /* 마지막 페이지 */
+      }catch(e){break;}
+    }
+  }
+
+  if(all.length>0){
+    FULL_DB=all;
+    try{localStorage.setItem('krDB',JSON.stringify({at:Date.now(),data:all}));}catch{}
+    console.log('전체 종목 로드 완료:',all.length,'개');
+  }
+}
+
 /* ── 상태 ── */
 function ld(){try{return JSON.parse(localStorage.getItem('pf9'))||{h:[],rate:1480,at:''};}catch{return{h:[],rate:1480,at:''}}}
 function sv(){localStorage.setItem('pf9',JSON.stringify(D))}
@@ -936,7 +978,13 @@ function doSearch(q){
   if(!q||!q.trim()){closeDD();return;}
   const myId=++_sid;
   const ql=q.toLowerCase().replace(/\s+/g,'');
-  const local=DB.filter(function(x){return x.n.toLowerCase().replace(/\s+/g,'').includes(ql)||x.s.toLowerCase().includes(ql);}).slice(0,10);
+  /* 로컬 DB + 전체 DB 검색 */
+  const staticRes=DB.filter(function(x){return x.n.toLowerCase().replace(/\s+/g,'').includes(ql)||x.s.toLowerCase().replace(/\.ks$/,'').includes(ql);});
+  const fullRes=FULL_DB.filter(function(x){
+    if(staticRes.find(function(s){return s.s===x.s;}))return false; /* 중복 제거 */
+    return x.n.toLowerCase().replace(/\s+/g,'').includes(ql)||x.s.toLowerCase().replace(/\.ks$/,'').includes(ql);
+  });
+  const local=[...staticRes,...fullRes].slice(0,15);
 
   /* 6자리 코드 직접 입력시 즉시 옵션 표시 */
   const is6=(/^\d{6}$/).test(q.trim());
@@ -1116,6 +1164,7 @@ function importData(input){
 render();
 initDD();
 setTimeout(prefetch,2000);
+setTimeout(loadFullDB,1000); /* 백그라운드에서 전체 종목 로드 */
 </script>
 </body>
 </html>
