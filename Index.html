@@ -25,28 +25,29 @@ body{font-family:-apple-system,'Helvetica Neue',sans-serif;background:#f5f3ee;co
 .frow{display:flex;gap:7px;margin-bottom:12px}
 .fp{padding:6px 14px;border-radius:20px;border:1px solid #e8e3d8;background:#fff;font-size:12px;color:#888;cursor:pointer;font-weight:500}
 .fp.on{background:#2563eb;color:#fff;border-color:#2563eb}
-.card{background:#fff;border-radius:14px;padding:14px;margin-bottom:10px;border:1px solid #e8e3d8}
-.crow{display:flex;justify-content:space-between;margin-bottom:10px}
-.cnrow{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
-.cdot{width:10px;height:10px;border-radius:2px;flex-shrink:0}
-.cname{font-weight:700;font-size:14px}
-.cbadge{font-size:10px;background:#fffbeb;color:#92400e;padding:1px 6px;border-radius:8px}
-.csub{font-size:11px;color:#aaa;margin-top:3px;margin-left:17px}
-.cval{font-weight:700;font-size:15px;text-align:right}
-.cpnl{font-size:12px;font-weight:500;text-align:right}
-.brow{display:flex;gap:7px;margin-bottom:8px;align-items:stretch}
-.bdg{border-radius:8px;padding:8px 10px;font-size:12px;display:flex;align-items:center}
-.bdg-g{background:#f0fdf4;color:#166534;flex:1}
-.bdg-s{background:#f9f8f5;color:#888;min-width:52px;justify-content:center}
-.rbtn{padding:8px 11px;border-radius:8px;border:1px solid #bfdbfe;background:#eff6ff;font-size:15px;cursor:pointer;flex-shrink:0}
-.rbtn:disabled{opacity:.5;cursor:default}
-.dtag{background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:7px 11px;font-size:12px;color:#92400e;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
-.etag{background:#fff7ed;border:1px solid #fed7aa;border-radius:7px;padding:5px 9px;font-size:11px;color:#c2410c;margin-bottom:7px}
-.divbox{background:#f9f8f5;border-radius:8px;padding:10px 12px;margin-bottom:8px;font-size:12px}
-.divrow{display:flex;justify-content:space-between;padding:4px 0;border-top:1px solid #e8e3d8}
-.divrow:first-child{border-top:none}
-.abtn{flex:1;padding:8px;border-radius:8px;border:1px solid #bfdbfe;background:#eff6ff;font-size:12px;color:#2563eb;cursor:pointer;font-weight:500}
-.dbtn{padding:8px 12px;border-radius:8px;border:1px solid #fecaca;background:#fef2f2;font-size:12px;color:#dc2626;cursor:pointer}
+.card{background:#fff;border-radius:12px;padding:12px 14px;margin-bottom:8px;border:1px solid #e8e3d8;position:relative;cursor:default}
+.card-main{display:flex;align-items:center;gap:10px}
+.cdot{width:9px;height:9px;border-radius:2px;flex-shrink:0}
+.cinfo{flex:1;min-width:0}
+.cname{font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.csub{font-size:11px;color:#aaa;margin-top:1px}
+.cright{text-align:right;flex-shrink:0}
+.cval{font-weight:700;font-size:14px}
+.cpnl{font-size:11px;font-weight:500}
+.cbadge{font-size:10px;background:#fffbeb;color:#92400e;padding:1px 5px;border-radius:6px;margin-left:4px}
+.cbtns{display:flex;gap:5px;margin-top:8px}
+.rbtn{padding:6px 10px;border-radius:7px;border:1px solid #bfdbfe;background:#eff6ff;font-size:13px;cursor:pointer;flex-shrink:0}
+.rbtn:disabled{opacity:.5}
+.abtn{flex:1;padding:6px;border-radius:7px;border:1px solid #bfdbfe;background:#eff6ff;font-size:11px;color:#2563eb;cursor:pointer;font-weight:500}
+.dbtn{padding:6px 10px;border-radius:7px;border:1px solid #fecaca;background:#fef2f2;font-size:11px;color:#dc2626;cursor:pointer}
+.etag{background:#fff7ed;border:1px solid #fed7aa;border-radius:7px;padding:4px 8px;font-size:11px;color:#c2410c;margin-top:6px}
+/* 호버 오버레이 */
+.div-overlay{display:none;position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(255,255,255,0.97);border-radius:12px;border:1px solid #fde68a;padding:12px 14px;z-index:10;opacity:0;transition:opacity .2s;pointer-events:none}
+.card:hover .div-overlay,.card.show-overlay .div-overlay{display:block;opacity:1;pointer-events:auto}
+.ov-title{font-size:12px;font-weight:700;color:#92400e;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
+.ov-row{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f3f3f1;font-size:12px}
+.ov-row:last-child{border:none}
+.ov-close{font-size:14px;cursor:pointer;color:#aaa;padding:0 4px}
 .addbtn{width:100%;padding:14px;border-radius:12px;border:2px dashed #93c5fd;background:#eff6ff;color:#2563eb;font-size:14px;font-weight:600;cursor:pointer;margin-top:2px}
 .empty{text-align:center;padding:50px 0;color:#bbb}
 .spin{display:inline-block;width:11px;height:11px;border:2px solid #bfdbfe;border-top-color:#2563eb;border-radius:50%;animation:sp .6s linear infinite;vertical-align:middle;margin-right:4px}
@@ -271,6 +272,50 @@ async function fetchRate(){
     if(rt&&rt>100)D.rate=Math.round(rt);
   }catch{}
 }
+async function yahooDiv(sym){
+  const now=Math.floor(Date.now()/1000);
+  const p1=now-400*24*3600; /* 13개월치 */
+  for(const server of ['query1','query2']){
+    for(const mkP of PROXIES){
+      try{
+        const url=`https://${server}.finance.yahoo.com/v7/finance/download/${encodeURIComponent(sym)}?period1=${p1}&period2=${now}&interval=1d&events=div`;
+        const r=await fetch(mkP(url));
+        if(!r.ok)continue;
+        const text=await r.text();
+        /* CSV 파싱: Date,Dividends */
+        const lines=text.trim().split('\n').slice(1).filter(l=>l&&!l.startsWith('Date'));
+        if(!lines.length)continue;
+        const rows=lines.map(l=>{
+          const [date,amt]=l.split(',');
+          return{date:date.trim(),amount:parseFloat(amt)||0};
+        }).filter(r=>r.amount>0).sort((a,b)=>b.date.localeCompare(a.date));
+        if(rows.length>0)return rows;
+      }catch{}
+    }
+  }
+  /* 폴백: chart API */
+  for(const server of ['query1','query2']){
+    for(const mkP of PROXIES){
+      try{
+        const url=`https://${server}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=2y&events=div`;
+        const r=await fetch(mkP(url));
+        if(!r.ok)continue;
+        const text=await r.text();
+        const j=JSON.parse(text.startsWith('{"contents"')?JSON.parse(text).contents:text);
+        const ev=j?.chart?.result?.[0]?.events?.dividends;
+        if(!ev)continue;
+        const cutoff=now-400*24*3600;
+        const rows=Object.values(ev)
+          .filter(d=>d.date>cutoff)
+          .map(d=>({date:new Date(d.date*1000).toISOString().split('T')[0],amount:parseFloat(d.amount.toFixed(4))}))
+          .sort((a,b)=>b.date.localeCompare(a.date));
+        if(rows.length>0)return rows;
+      }catch{}
+    }
+  }
+  return [];
+}
+
 async function fhDivs(sym){
   if(isKR(sym)){
     /* 한국주식 - Yahoo Finance 배당 데이터 */
@@ -304,27 +349,7 @@ async function fhDivs(sym){
       const j=await r.json();
       return(j||[]).map(d=>({date:d.date||d.payDate||'',amount:d.amount||0})).sort((a,b)=>b.date.localeCompare(a.date));
     }catch{
-      /* 미국주식도 Yahoo Finance 폴백 */
-      const url=`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=3mo&range=2y&events=div`;
-      for(const mkP of PROXIES){
-        try{
-          const r=await fetch(mkP(url));
-          if(!r.ok)continue;
-          const text=await r.text();
-          const j=JSON.parse(text.startsWith('{"contents"')?JSON.parse(text).contents:text);
-          const divEvents=j?.chart?.result?.[0]?.events?.dividends;
-          if(!divEvents)return [];
-          const cutoff=Date.now()/1000-365*24*3600;
-          return Object.values(divEvents)
-            .filter(d=>d.date>cutoff)
-            .map(d=>({
-              date:new Date(d.date*1000).toISOString().split('T')[0],
-              amount:parseFloat(d.amount.toFixed(4))
-            }))
-            .sort((a,b)=>b.date.localeCompare(a.date));
-        }catch{}
-      }
-      return [];
+      return await yahooDiv(sym);
     }
   }
 }
@@ -537,6 +562,34 @@ function confirmBuy(){
   save();document.getElementById('buyOv').classList.remove('show');render();
 }
 function openAdd(){document.getElementById('addOv').classList.add('show');}
+function handleCardClick(e,id,isDv){
+  if(!isDv)return;
+  /* 모바일/터치: 탭으로 토글 */
+  if(e.pointerType==='touch'||window.matchMedia('(hover:none)').matches){
+    toggleOv(e,id);
+  }
+}
+function toggleOv(e,id){
+  e.stopPropagation();
+  const card=document.getElementById('card_'+id);
+  if(!card)return;
+  card.classList.toggle('show-overlay');
+  /* 오버레이 열 때 배당 없으면 자동 조회 */
+  const h=D.h.find(x=>x.id===id);
+  if(h&&h.divHistory===undefined&&card.classList.contains('show-overlay')){
+    fetchDivs(id);
+  }
+}
+/* PC: 마우스 올리면 배당 있는 종목 자동 조회 */
+document.addEventListener('mouseover',e=>{
+  const card=e.target.closest('.card[id]');
+  if(!card)return;
+  const id=parseInt(card.id.replace('card_',''));
+  const h=D.h.find(x=>x.id===id);
+  if(h&&h.isDv&&h.divHistory===undefined){
+    fetchDivs(id);
+  }
+});
 let _gt=null;
 function showG(m){document.getElementById('gld').style.display='flex';setGMsg(m);if(_gt)clearTimeout(_gt);_gt=setTimeout(forceClose,30000);}
 function setGMsg(m){document.getElementById('gmsg').textContent=m;}
