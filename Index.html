@@ -559,6 +559,32 @@ async function resolveKoreanName(code){
   }catch{}
   return null;
 }
+async function fhDivs(sym){
+  // Yahoo Finance 배당 데이터 (국내외 모두)
+  const url=`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1mo&range=2y&events=dividends`;
+  for(const mkP of [u=>u,...PROXIES]){
+    try{
+      const r=await fetch(mkP(url));
+      if(!r.ok)continue;
+      const text=await r.text();
+      const j=JSON.parse(text.startsWith('{"contents"')?JSON.parse(text).contents:text);
+      const divEvents=j?.chart?.result?.[0]?.events?.dividends;
+      if(!divEvents)return[];
+      // {timestamp: {amount, date}} 형식
+      const divArr=Object.values(divEvents)
+        .map(d=>({
+          date:new Date(d.date*1000).toISOString().split('T')[0],
+          amount:d.amount||0
+        }))
+        .filter(d=>d.amount>0)
+        .sort((a,b)=>b.date.localeCompare(a.date))
+        .slice(0,12);
+      if(divArr.length>0)return divArr;
+    }catch{}
+  }
+  return[];
+}
+
 async function fetchDivs(id){
   const h=D.h.find(x=>x.id===id);if(!h)return;
   LDS.add(id);render();
@@ -582,7 +608,10 @@ function renderDivHistory(h,id){
     </div>`;
   }
   if(!h.divHistory.length){
-    return`<div style="font-size:12px;color:#aaa;text-align:center;padding:8px 0;margin-bottom:12px">조회된 배당 내역 없음</div>`;
+    return`<div style="background:#f9f8f5;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#aaa;text-align:center">
+      배당 데이터를 찾을 수 없습니다<br>
+      <button onclick="fetchDivs(${id})" style="margin-top:6px;font-size:11px;color:#2563eb;border:none;background:none;cursor:pointer;padding:0">🔄 재조회</button>
+    </div>`;
   }
   const tot=h.divHistory.reduce((s,d)=>s+(d.amount||0),0);
   const maxA=Math.max(...h.divHistory.map(d=>d.amount||0),1);
