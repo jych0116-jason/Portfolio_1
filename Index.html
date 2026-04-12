@@ -1667,57 +1667,48 @@ async function fetchNaverSearch(q,dd,localCount){
     const found=getAllDB().find(x=>x.s.replace(/\.(KS|KQ)$/,'')=== c);
     if(found){showDD(dd,[found],q);return;}
     showDD(dd,[{n:c,s:c+'.KS',dy:0,df:'없음',isDv:false,market:'국내주식',_isCode:true}],q);
-    const cdata=await acSearch(c,11);
-    const hit=(acItems(cdata)||[]).flat().find(x=>x[1]===c);
-    if(hit){const div=guessEtfDiv(hit[0]);showDD(dd,[{n:hit[0],s:c+'.KS',dy:div.dy,df:div.df,isDv:div.isDv,market:'국내주식'}],q);}
+    // 6자리 코드로 Yahoo 검색
+    const r=await yahooSearch(c+'.KS');
+    if(r.length)showDD(dd,r,q);
     return;
   }
-  const data=await acSearch(q,30);
-  const acR=[];
-  if(data){
-    // items = [[KOSPI종목배열], [KOSDAQ종목배열]]
-    (acItems(data)||[]).forEach((group,gi)=>{
-      (Array.isArray(group)?group:[]).forEach(item=>{
-        if(!Array.isArray(item))return;
-        const name=item[0],code=item[1];
-        if(!name||!code||!/^[A-Za-z0-9]{5,7}$/.test(String(code)))return;
-        const sym=String(code)+(gi===0?'.KS':'.KQ');
-        if(acR.find(x=>x.s===sym))return;
-        const db=getAllDB().find(x=>x.s===sym||x.n===name);
-        const div=db||guessEtfDiv(name);
-        acR.push({n:name,s:sym,dy:div.dy||0,df:div.df||'없음',isDv:div.isDv||false,market:gi===0?'KOSPI':'KOSDAQ'});
-      });
-    });
-  }
+  // Yahoo Finance 검색 (국내주식 포함 전 종목)
+  const yR=await yahooSearch(q);
   const seen=new Set();
   const ql=q.toLowerCase();
-  const merged=[...getAllDB().filter(x=>x.n.includes(q)||x.n.toLowerCase().includes(ql)),...acR]
+  const local=getAllDB().filter(x=>x.n.includes(q)||x.n.toLowerCase().includes(ql));
+  const merged=[...local,...yR]
     .filter(x=>{if(seen.has(x.s))return false;seen.add(x.s);return true;}).slice(0,15);
   if(merged.length)showDD(dd,merged,q);
 }
 
-async function acSearch(q,limit){
-  // 1) JSONP 시도
-  try{
-    const r=await naverACJsonp(q,limit||30);
-    // items는 [[KOSPI종목들], [KOSDAQ종목들]] 구조 - flat으로 확인
-    if(r?.items&&r.items.flat().length>0)return r;
-  }catch{}
-  // 2) CORS 프록시 순차 시도
-  const url='https://ac.finance.naver.com/ac?q='+encodeURIComponent(q)
-    +'&q_enc=UTF-8&st=111&sug_typ=1&r_format=json&r_enc=UTF-8'
-    +'&r_lt='+(limit||30)+'&r_unicode=1&r_escape=1';
-  for(const mkP of PROXIES){
+async function yahooSearch(q){
+  const url='https://query1.finance.yahoo.com/v1/finance/search?q='+encodeURIComponent(q)
+    +'&lang=ko&region=KR&quotesCount=15&newsCount=0&enableFuzzyQuery=false';
+  for(const mkP of [u=>u,...PROXIES]){
     try{
-      const r=await fetch(mkP(url));if(!r.ok)continue;
+      const r=await fetch(mkP(url));
+      if(!r.ok)continue;
       const text=await r.text();
-      const raw=text.startsWith('{"contents"')?JSON.parse(text).contents:text;
-      const j=JSON.parse(raw);
-      if(j?.items&&j.items.flat().length>0)return j;
+      const j=JSON.parse(text.startsWith('{"contents"')?JSON.parse(text).contents:text);
+      const quotes=j?.finance?.result?.[0]?.quotes||j?.quotes||[];
+      const results=[];
+      quotes.forEach(q=>{
+        const sym=q.symbol||'';
+        const name=q.shortname||q.longname||sym;
+        if(!sym||!name)return;
+        const db=getAllDB().find(x=>x.s===sym||x.n===name);
+        const div=db||guessEtfDiv(name);
+        const market=sym.endsWith('.KS')?'KOSPI':sym.endsWith('.KQ')?'KOSDAQ':'해외';
+        results.push({n:name,s:sym,dy:div.dy||0,df:div.df||'없음',isDv:div.isDv||false,market});
+      });
+      if(results.length)return results;
     }catch{}
   }
-  return null;
+  return[];
 }
+
+async function acSearch(q,limit){return null;}
 
 function showDD(dd,items,q){
   if(!items.length){dd.style.display='none';return;}
