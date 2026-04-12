@@ -840,76 +840,104 @@ async function runSsAnalyze(){
   var res=document.getElementById('ssResult');
   var imp=document.getElementById('ssImportBtn');
 
-  st.style.display='block'; stxt.textContent='이미지 압축 중...';
+  st.style.display='block'; stxt.textContent='이미지 처리 중...';
   btn.style.display='none'; res.style.display='none'; imp.style.display='none';
 
   try{
-    // 1) canvas로 리사이즈 → 작은 JPEG
+    // 이미지 → base64 dataUrl
     var dataUrl=await new Promise(function(resolve,reject){
       var img=new Image();
       img.onload=function(){
-        var MAX=600, w=img.width, h=img.height;
+        var MAX=800, w=img.width, h=img.height;
         if(w>MAX){h=Math.round(h*MAX/w);w=MAX;}
-        if(h>1200){w=Math.round(w*1200/h);h=1200;}
+        if(h>1600){w=Math.round(w*1600/h);h=1600;}
         var c=document.createElement('canvas');
         c.width=w; c.height=h;
         c.getContext('2d').drawImage(img,0,0,w,h);
-        resolve(c.toDataURL('image/jpeg',0.6));
+        resolve(c.toDataURL('image/jpeg',0.85));
       };
       img.onerror=function(){reject(new Error('이미지 로드 실패'));};
       img.src=URL.createObjectURL(SS_FILE);
     });
+    var b64=dataUrl.split(',')[1];
 
-    stxt.textContent='텍스트 인식 중...';
+    // ── 1단계: Claude 비전 API 시도 ──
+    var anthKey=localStorage.getItem('anth_key')||'';
+    var text='', usedClaude=false;
 
-    // 2) URLSearchParams로 전송 (iOS Safari 가장 안정적)
-    var params=new URLSearchParams();
-    params.append('base64Image', dataUrl);
-    params.append('language','kor');
-    params.append('isOverlayRequired','false');
-    params.append('scale','true');
-    params.append('OCREngine','2');
-    params.append('apikey','helloworld');
-    var bodyStr=params.toString();
-
-    var text='';
-    // OCR.space 직접 시도 → corsproxy 시도
-    var urls=[
-      'https://api.ocr.space/parse/image',
-      'https://corsproxy.io/?'+encodeURIComponent('https://api.ocr.space/parse/image')
-    ];
-    var lastErr='';
-    for(var i=0;i<urls.length;i++){
+    if(anthKey){
       try{
-        var r=await fetch(urls[i],{
+        stxt.textContent='Claude AI 분석 중...';
+        var prompt='이 이미지는 한국 증권사 앱(KB증권/미래에셋/삼성증권 등)의 보유종목 화면입니다.\n아래 JSON 배열만 출력하세요(다른 텍스트 없이):\n[\n  {"name":"종목명","code":"6자리코드또는null","qty":수량숫자,"avgPrice":평단가숫자,"acct":"general또는tax","acctName":"계좌명"}\n]\nacct 기준: ISA/IRP/연금/연금저축/개인형/개인종합자산관리→"tax", 위탁/일반→"general"\n같은 종목이 여러 계좌에 있으면 각각 별도 행으로. 반드시 JSON만 출력.';
+        var resp=await fetch('https://api.anthropic.com/v1/messages',{
           method:'POST',
-          headers:{'Content-Type':'application/x-www-form-urlencoded'},
-          body:bodyStr
+          headers:{
+            'Content-Type':'application/json',
+            'x-api-key':anthKey,
+            'anthropic-version':'2023-06-01',
+            'anthropic-dangerous-direct-browser-access':'true'
+          },
+          body:JSON.stringify({
+            model:'claude-haiku-4-5',
+            max_tokens:1000,
+            messages:[{role:'user',content:[
+              {type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},
+              {type:'text',text:prompt}
+            ]}]
+          })
         });
-        if(!r.ok){lastErr='HTTP '+r.status;continue;}
-        var d=await r.json();
-        if(d.IsErroredOnProcessing){lastErr=d.ErrorMessage||'처리실패';continue;}
-        text=(d.ParsedResults||[]).map(function(x){return x.ParsedText||'';}).join('\n');
-        if(text.trim())break;
-      }catch(e){lastErr=e.message||String(e);}
+        if(resp.ok){
+          var d=await resp.json();
+          var raw=(d.content||[]).map(function(c){return c.text||'';}).join('');
+          var clean=raw.replace(/```json|```/g,'').trim();
+          SS_PARSED=JSON.parse(clean);
+          if(Array.isArray(SS_PARSED)&&SS_PARSED.length){usedClaude=true;}
+        }
+      }catch(e){SS_PARSED=[];}
+    }
+
+    // ── 2단계: OCR.space 폴백 ──
+    if(!usedClaude){
+      stxt.textContent='텍스트 인식 중...';
+      var params=new URLSearchParams();
+      params.append('base64Image',dataUrl);
+      params.append('language','kor');
+      params.append('isOverlayRequired','false');
+      params.append('scale','true');
+      params.append('OCREngine','2');
+      params.append('apikey','helloworld');
+      var bodyStr=params.toString();
+      var ocrUrls=[
+        'https://api.ocr.space/parse/image',
+        'https://corsproxy.io/?'+encodeURIComponent('https://api.ocr.space/parse/image')
+      ];
+      var ocrText='', lastErr='';
+      for(var i=0;i<ocrUrls.length;i++){
+        try{
+          var r=await fetch(ocrUrls[i],{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:bodyStr});
+          if(!r.ok){lastErr='HTTP '+r.status;continue;}
+          var od=await r.json();
+          if(od.IsErroredOnProcessing){lastErr=od.ErrorMessage||'처리실패';continue;}
+          ocrText=(od.ParsedResults||[]).map(function(x){return x.ParsedText||'';}).join('\n');
+          if(ocrText.trim())break;
+        }catch(e){lastErr=e.message||String(e);}
+      }
+      if(ocrText.trim()) SS_PARSED=parseOcrText(ocrText);
+      else text=lastErr;
     }
 
     st.style.display='none';
-    if(!text.trim()){
-      res.innerHTML='<div style="background:#fef2f2;border-radius:10px;padding:12px;font-size:12px;color:#dc2626">❌ 인식 실패: '+lastErr+'</div>';
+
+    if(!SS_PARSED||!SS_PARSED.length){
+      // API 키 없으면 안내
+      var keyHint=anthKey?'':'<div style="margin-top:8px;padding:8px;background:#eff6ff;border-radius:8px;font-size:11px;color:#1d4ed8">💡 Claude AI로 정확하게 인식하려면 아래에 API 키 입력 (무료):<br><input id="ssKeyInput" type="password" placeholder="sk-ant-..." style="width:100%;padding:6px;border:1px solid #bfdbfe;border-radius:6px;margin-top:5px;font-size:12px"><button onclick="var k=document.getElementById(\'ssKeyInput\').value;if(k.startsWith(\'sk-ant-\')){localStorage.setItem(\'anth_key\',k);alert(\'저장됨! 재시도해주세요.\');}else{alert(\'올바른 키가 아닙니다\');}" style="width:100%;margin-top:5px;padding:7px;border:none;background:#2563eb;color:#fff;border-radius:6px;font-size:12px;cursor:pointer">저장하고 재시도</button></div>';
+      res.innerHTML='<div style="background:#fff7ed;border-radius:10px;padding:12px;font-size:12px;color:#d97706">⚠️ 종목 인식 실패'+keyHint+'</div>';
       res.style.display='block';
       btn.style.display='block'; btn.textContent='🔄 재시도';
       return;
     }
+    renderSsParsed();
 
-    SS_PARSED=parseOcrText(text);
-    if(!SS_PARSED.length){
-      res.innerHTML='<div style="background:#fff7ed;border-radius:10px;padding:12px;font-size:12px;color:#d97706">⚠️ 텍스트 인식됐으나 종목 패턴 없음.<br><small style="color:#aaa">'+text.slice(0,200).replace(/</g,'&lt;')+'</small></div>';
-      res.style.display='block';
-      btn.style.display='block'; btn.textContent='🔄 재시도';
-    }else{
-      renderSsParsed();
-    }
   }catch(err){
     st.style.display='none';
     res.innerHTML='<div style="background:#fef2f2;border-radius:10px;padding:12px;font-size:12px;color:#dc2626">❌ '+(err.message||'오류')+'</div>';
@@ -946,76 +974,77 @@ function confirmSsImport(){
 
 /* ===== REINVEST SIMULATION ===== */
 function parseOcrText(text){
-  const lines=text.split('\n').map(l=>l.trim()).filter(Boolean);
-  const results=[];
+  var N=function(s){return parseInt(String(s).replace(/[,\s]/g,'').replace(/[Ool]/g,function(c){return c==='O'||c==='o'?'0':'1';}),10);};
+  var lines=text.split(/[\n\r]+/).map(function(l){return l.trim();}).filter(Boolean);
+  var full=text.replace(/\s+/g,' ');
+  var results=[];
+  var taxKw=['ISA','IRP','연금','연금저축','개인형','종합자산관리','신연금','각시'];
+  var genKw=['위탁','일반계좌'];
+  var seen=new Set();
 
-  // 계좌 키워드 감지
-  const taxKeywords=['ISA','IRP','연금','연금저축','개인형','종합자산관리','신연금'];
-  const generalKeywords=['위탁','일반'];
+  function acctOf(nearby){
+    if(taxKw.some(function(k){return nearby.includes(k);}))return{acct:'tax',acctName:taxKw.find(function(k){return nearby.includes(k);})||'절세'};
+    if(genKw.some(function(k){return nearby.includes(k);}))return{acct:'general',acctName:'위탁'};
+    return{acct:'general',acctName:'일반'};
+  }
+  function push(name,qty,price,acctObj,code){
+    if(!name||qty<=0||price<=0||qty>5000000||price<5)return;
+    var k=name+'|'+qty+'|'+price;
+    if(seen.has(k))return;
+    seen.add(k);
+    results.push({name:name.slice(0,30),code:code||null,qty:qty,avgPrice:price,acct:acctObj.acct,acctName:acctObj.acctName});
+  }
+  function cleanN(s){return s.replace(/[^\uAC00-\uD7A3A-Za-z0-9\s\-]/g,'').replace(/\s{2,}/g,' ').trim();}
 
-  let currentAcct='general';
+  // ── 패턴 A: "N주 · M원" (계좌별 목록 형식) ──
+  var pA=/([가-힣A-Za-z][가-힣A-Za-z0-9\s\-]*?)\s+([\d,]+)주\s*[··・\-]\s*([\d,]+)원/g;
+  var mA;
+  while((mA=pA.exec(text))!==null){
+    var nm=cleanN(mA[1]), qty=N(mA[2]), price=N(mA[3]);
+    var ctx=text.slice(Math.max(0,mA.index-80),mA.index+80);
+    push(nm,qty,price,acctOf(ctx));
+  }
 
-  // 숫자 정규화 (O→0, l→1, 쉼표 제거)
-  function normNum(s){return s.replace(/[Ool]/g,c=>c==='O'||c==='o'?'0':'1').replace(/,/g,'');}
-  function toNum(s){const n=parseFloat(normNum(s));return isNaN(n)?null:n;}
-
-  // 패턴 1: "종목명 N주 M원" or "N주·M원" 형식
-  const pQtyPrice=/(\d[\d,Oo]+)\s*주\s*[·\·\・]\s*(\d[\d,Oo]+)\s*원/;
-  // 패턴 2: 코드 6자리
-  const pCode=/\b([0-9A-Za-z]{6})\b/;
-  // 패턴 3: 평단가 단독
-  const pAvg=/평단[가]?\s*[:\s]\s*([\d,Oo]+)\s*원?/;
-  const pQty=/보유[량주]?\s*[:\s]\s*([\d,Oo]+)\s*주?/;
-
-  // 종목명 + 수량 + 평단 함께 있는 줄 찾기
-  for(let i=0;i<lines.length;i++){
-    const line=lines[i];
-
-    // 계좌 이름 감지
-    if(taxKeywords.some(k=>line.includes(k)))currentAcct='tax';
-    else if(generalKeywords.some(k=>line.includes(k)))currentAcct='general';
-
-    // "N주 · M원" 패턴
-    const m=line.match(pQtyPrice);
-    if(m){
-      const qty=toNum(m[1]), price=toNum(m[2]);
-      if(!qty||!price||qty>1000000||price<10)continue;
-
-      // 종목명: 이 줄 또는 이전 줄에서 찾기
-      let name=line.replace(pQtyPrice,'').replace(pCode,'').trim();
-      if(!name||name.length<2){
-        // 이전 줄에서 한글/영문 종목명 찾기
-        for(let j=i-1;j>=Math.max(0,i-4);j--){
-          const prev=lines[j];
-          if(/[가-힣A-Z]/.test(prev)&&prev.length>=2&&!/^\d/.test(prev)){
-            name=prev.replace(pCode,'').trim();
-            break;
-          }
-        }
+  // ── 패턴 B: 보유량/평단가 형식 (단일 종목 상세 화면) ──
+  var qty2=0,price2=0,name2='';
+  var mQty=full.match(/보유[량주]?\s*([\d,]+)\s*주/);
+  var mPrc=full.match(/평단[가]?\s*([\d,]+)\s*원/);
+  if(mQty)qty2=N(mQty[1]);
+  if(mPrc)price2=N(mPrc[1]);
+  if(qty2>0&&price2>0){
+    // 종목명: 6자리 코드 앞에 있는 한글 이름 찾기
+    var mName=full.match(/([가-힣A-Z][가-힣A-Za-z0-9\s\-]{3,40}?)\s+\d{6}/);
+    if(mName)name2=cleanN(mName[1]);
+    else{
+      // 첫 번째 긴 한글 텍스트
+      for(var i=0;i<lines.length;i++){
+        if(/[가-힣]{3}/.test(lines[i])&&lines[i].length>=4&&!/\d{4}/.test(lines[i])){name2=cleanN(lines[i]);break;}
       }
-      // 코드 추출
-      const codeM=line.match(pCode);
-      const code=codeM&&/^\d{6}$/.test(codeM[1])?codeM[1]:null;
+    }
+    // 코드
+    var mCode=full.match(/\b(\d{6})\b/);
+    var code2=mCode?mCode[1]:null;
+    // 계좌: 전체 텍스트 기준
+    var acct2=acctOf(full);
+    push(name2||'종목',qty2,price2,acct2,code2);
+  }
 
-      if(name&&name.length>=2){
-        // 계좌명: 현재 컨텍스트에서 가장 가까운 계좌 키워드
-        let acctName='일반';
-        for(let j=i;j>=Math.max(0,i-6);j--){
-          if(taxKeywords.some(k=>lines[j].includes(k))){acctName=lines[j].replace(/\s+/g,'').slice(0,8);currentAcct='tax';break;}
-          if(generalKeywords.some(k=>lines[j].includes(k))){acctName='위탁';currentAcct='general';break;}
-        }
-        results.push({name:cleanName(name),code,qty,avgPrice:price,acct:currentAcct,acctName});
+  // ── 패턴 C: "N주\n M원" 두 줄에 걸친 경우 ──
+  for(var i=0;i<lines.length-1;i++){
+    var mQ=lines[i].match(/^([\d,]+)\s*주$/);
+    var mP=lines[i+1].match(/^([\d,]+)\s*원$/);
+    if(mQ&&mP){
+      var qty3=N(mQ[1]), price3=N(mP[1]);
+      var ctx3=lines.slice(Math.max(0,i-4),i+3).join(' ');
+      var nm3='';
+      for(var j=i-1;j>=Math.max(0,i-4);j--){
+        if(/[가-힣A-Z]/.test(lines[j])&&lines[j].length>=3){nm3=cleanN(lines[j]);break;}
       }
+      push(nm3||'종목',qty3,price3,acctOf(ctx3));
     }
   }
 
-  // 중복 제거 (같은 종목+계좌)
-  const seen=new Set();
-  return results.filter(x=>{
-    const k=x.name+'|'+x.acct+'|'+x.qty;
-    if(seen.has(k))return false;
-    seen.add(k);return true;
-  });
+  return results;
 }
 
 function cleanName(s){
