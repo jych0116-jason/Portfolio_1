@@ -238,21 +238,31 @@ body{font-family:-apple-system,'Helvetica Neue',sans-serif;background:#f5f3ee;co
 <!-- 추가매수 모달 -->
 
 <div class="ov" id="buyOv" onclick="if(event.target===this)this.classList.remove('show')">
-<div class="modal" onclick="event.stopPropagation()">
-  <div class="mt">추가매수</div>
-  <div id="buyInfo" style="font-size:13px;color:#888;margin-bottom:16px"></div>
-  <div class="fr">
-    <div class="fg"><div class="fl">매수 수량</div><div class="iw"><input class="inp" id="bQty" type="number" inputmode="numeric" placeholder="100"><span class="suf">주</span></div></div>
-    <div class="fg"><div class="fl">매수 단가</div><div class="iw"><input class="inp" id="bAvg" type="number" inputmode="numeric" placeholder="55000"><span class="suf">원</span></div></div>
+<div class="modal" onclick="event.stopPropagation()" style="padding:20px 18px 32px">
+  <div style="font-size:17px;font-weight:800;margin-bottom:6px">추가매수</div>
+  <div id="buyInfo" style="font-size:12px;color:#888;margin-bottom:12px"></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+    <div>
+      <div style="font-size:11px;color:#888;margin-bottom:4px">수량</div>
+      <div class="iw"><input class="inp" id="bQty" type="number" inputmode="numeric" placeholder="100" style="padding:10px 8px"><span class="suf">주</span></div>
+    </div>
+    <div>
+      <div style="font-size:11px;color:#888;margin-bottom:4px">단가</div>
+      <div class="iw"><input class="inp" id="bAvg" type="number" inputmode="numeric" placeholder="55000" style="padding:10px 8px"><span class="suf">원</span></div>
+    </div>
+    <div>
+      <div style="font-size:11px;color:#888;margin-bottom:4px">매수일</div>
+      <div class="iw"><input class="inp" id="bDate" type="date" style="padding:10px 8px"></div>
+    </div>
+    <div>
+      <div style="font-size:11px;color:#888;margin-bottom:4px">계좌</div>
+      <div class="iw"><select class="inp" id="bAcct" style="-webkit-appearance:auto;appearance:auto;padding:10px 6px"><option value="general">일반</option><option value="tax">절세</option></select></div>
+    </div>
   </div>
-  <div class="fr">
-    <div class="fg"><div class="fl">매수일</div><div class="iw"><input class="inp" id="bDate" type="date"></div></div>
-    <div class="fg"><div class="fl">계좌 유형</div><div class="iw"><select class="inp" id="bAcct" style="-webkit-appearance:auto;appearance:auto"><option value="general">일반</option><option value="tax">절세 (ISA/IRP/연금)</option></select></div></div>
-  </div>
-  <div id="buyPrev" style="background:#eff6ff;border-radius:9px;padding:9px 12px;font-size:12px;color:#2563eb;margin-bottom:14px;display:none"></div>
-  <div class="mbtns">
-    <button class="bcn" onclick="document.getElementById('buyOv').classList.remove('show')">취소</button>
-    <button class="bsb" onclick="confirmBuy()">매수 반영</button>
+  <div id="buyPrev" style="background:#eff6ff;border-radius:9px;padding:8px 12px;font-size:12px;color:#2563eb;margin-bottom:10px;display:none"></div>
+  <div style="display:flex;gap:10px">
+    <button class="bcn" style="flex:1" onclick="document.getElementById('buyOv').classList.remove('show')">취소</button>
+    <button class="bsb" style="flex:2" onclick="confirmBuy()">매수 반영</button>
   </div>
 </div>
 </div>
