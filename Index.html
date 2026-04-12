@@ -557,16 +557,23 @@ async function fetchDivs(id){
   LDS.delete(id);render();
 }
 async function fetchRate(){
+  // 방법 1: Yahoo Finance USDKRW=X
   try{
-    const r=await Promise.race([
-      fetch('https://api.frankfurter.app/latest?from=USD&to=KRW'),
-      new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),5000))
-    ]);
-    if(!r.ok)return;
-    const d=await r.json();
-    const rate=d?.rates?.KRW;
-    if(rate&&rate>0)D.rate=Math.round(rate);
+    const res=await yahooQuote('USDKRW=X');
+    if(res&&res.price>0){D.rate=Math.round(res.price);save();render();return;}
   }catch{}
+  // 방법 2: frankfurter.app CORS 프록시 경유
+  const url='https://api.frankfurter.app/latest?from=USD&to=KRW';
+  for(const mkP of PROXIES){
+    try{
+      const r=await fetch(mkP(url));
+      if(!r.ok)continue;
+      const text=await r.text();
+      const d=JSON.parse(text.startsWith('{"contents"')?JSON.parse(text).contents:text);
+      const rate=d&&d.rates&&d.rates.KRW;
+      if(rate&&rate>0){D.rate=Math.round(rate);save();render();return;}
+    }catch{}
+  }
 }
 
 async function refreshAll(){
