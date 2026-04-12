@@ -228,11 +228,17 @@ body{font-family:-apple-system,'Helvetica Neue',sans-serif;background:#f5f3ee;co
   <div class="mt">종목 추가</div>
   <div class="fg" style="position:relative">
     <div class="fl">종목명</div>
-    <div class="iw"><input class="inp" id="aName" placeholder="삼성전자, JEPQ, KODEX…" autocomplete="off" oninput="doSearchDD(this.value)" onkeydown="if(event.key==='Escape')closeDD()"></div>
+    <div class="iw"><input class="inp" id="aName" placeholder="삼성전자, JEPQ, KODEX…" autocomplete="off" oninput="doSearchDD(this.value);updateAvgCurrency(this.value)" onkeydown="if(event.key==='Escape')closeDD()"></div>
     <div id="searchDD" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #e8e3d8;border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:200;max-height:220px;overflow-y:auto;margin-top:3px"></div>
   </div>
   <div class="fr">
-    <div class="fg"><div class="fl">평균 매수가 *</div><div class="iw"><input class="inp" id="aAvg" type="number" inputmode="numeric" placeholder="50000"><span class="suf">원</span></div></div>
+    <div class="fg">
+      <div class="fl" style="display:flex;justify-content:space-between;align-items:center">
+        <span>평균 매수가 *</span>
+        <span id="aAvgCurLabel" style="font-size:10px;color:#2563eb;font-weight:600"></span>
+      </div>
+      <div class="iw"><input class="inp" id="aAvg" type="number" inputmode="decimal" placeholder="50000"><span class="suf" id="aAvgSuf">원</span></div>
+    </div>
     <div class="fg"><div class="fl">수량 *</div><div class="iw"><input class="inp" id="aQty" type="number" inputmode="numeric" placeholder="100"><span class="suf">주</span></div></div>
   </div>
   <div class="fr">
@@ -1205,9 +1211,28 @@ function delH(id){
   document.getElementById('histOv').classList.remove('show');
   D.h=D.h.filter(x=>x.id!==id);save();render();
 }
+function updateAvgCurrency(name){
+  const sym=toSym(name);
+  const isUS=name&&!isKR(sym)&&/^[A-Za-z]/.test(name.trim());
+  const suf=document.getElementById('aAvgSuf');
+  const lbl=document.getElementById('aAvgCurLabel');
+  const inp=document.getElementById('aAvg');
+  if(isUS){
+    suf.textContent='$';
+    lbl.textContent='USD → 자동 변환';
+    inp.placeholder='85.50';
+    inp.setAttribute('inputmode','decimal');
+  }else{
+    suf.textContent='원';
+    lbl.textContent='';
+    inp.placeholder='50000';
+    inp.setAttribute('inputmode','numeric');
+  }
+}
+
 async function addHolding(){
   const nm=document.getElementById('aName').value.trim();
-  const avg=parseFloat(document.getElementById('aAvg').value);
+  let avg=parseFloat(document.getElementById('aAvg').value);
   const qty=parseInt(document.getElementById('aQty').value);
   const dy=parseFloat(document.getElementById('aDy').value)||0;
   const df=document.getElementById('aDf').value;
@@ -1217,8 +1242,13 @@ async function addHolding(){
   if(!avg||!qty){alert('평단가와 수량을 입력해주세요');return;}
   const dbItem=SEARCH_DB.find(x=>x.n===nm||x.s===nm.toUpperCase())||getAllDB().find(x=>x.n===nm);
   const sym=dbItem?dbItem.s:toSym(nm);
+  // USD 입력 → KRW 변환
+  const isUS=!isKR(sym)&&/^[A-Za-z]/.test(nm.trim());
+  if(isUS&&avg<10000){
+    await fetchRate();
+    avg=Math.round(avg*D.rate);
+  }
   const id=Date.now();
-  // buys: 매수 내역 배열
   const buys=[{id:id+'_0',qty,price:avg,date,acct}];
   D.h.push({id,n:nm,sym,avg,avgCost:avg,qty,cur:avg,dy,df:dy>0?df:'없음',isDv:dy>0,err:0,divHistory:undefined,acct,memo:'',buys});
   save();document.getElementById('addOv').classList.remove('show');render();
@@ -1226,6 +1256,7 @@ async function addHolding(){
   document.getElementById('aDf').value='없음';
   document.getElementById('aAcct').value='general';
   document.getElementById('aDate').value='';
+  updateAvgCurrency('');
   if(!isKR(sym))await fetchRate();
   await fetchOne(id);
 }
@@ -1641,38 +1672,48 @@ async function fetchNaverSearch(q,dd,localCount){
     if(hit){const div=guessEtfDiv(hit[0]);showDD(dd,[{n:hit[0],s:c+'.KS',dy:div.dy,df:div.df,isDv:div.isDv,market:'국내주식'}],q);}
     return;
   }
-  if(localCount>=8)return;
-  const data=await acSearch(q,20);
-  if(!data)return;
+  const data=await acSearch(q,30);
   const acR=[];
-  acItems(data).forEach((group,gi)=>{
-    (group||[]).forEach(item=>{
-      const name=item[0],code=item[1];
-      if(!name||!code||!/^[A-Za-z0-9]{6,7}$/.test(code))return;
-      const sym=code+(gi===0?'.KS':'.KQ');
-      const db=getAllDB().find(x=>x.s===sym||x.n===name);
-      const div=db||guessEtfDiv(name);
-      acR.push({n:name,s:sym,dy:div.dy||0,df:div.df||'없음',isDv:div.isDv||false,market:gi===0?'KOSPI':'KOSDAQ'});
+  if(data){
+    // items = [[KOSPI종목배열], [KOSDAQ종목배열]]
+    (acItems(data)||[]).forEach((group,gi)=>{
+      (Array.isArray(group)?group:[]).forEach(item=>{
+        if(!Array.isArray(item))return;
+        const name=item[0],code=item[1];
+        if(!name||!code||!/^[A-Za-z0-9]{5,7}$/.test(String(code)))return;
+        const sym=String(code)+(gi===0?'.KS':'.KQ');
+        if(acR.find(x=>x.s===sym))return;
+        const db=getAllDB().find(x=>x.s===sym||x.n===name);
+        const div=db||guessEtfDiv(name);
+        acR.push({n:name,s:sym,dy:div.dy||0,df:div.df||'없음',isDv:div.isDv||false,market:gi===0?'KOSPI':'KOSDAQ'});
+      });
     });
-  });
+  }
   const seen=new Set();
   const ql=q.toLowerCase();
   const merged=[...getAllDB().filter(x=>x.n.includes(q)||x.n.toLowerCase().includes(ql)),...acR]
-    .filter(x=>{if(seen.has(x.s))return false;seen.add(x.s);return true;}).slice(0,12);
+    .filter(x=>{if(seen.has(x.s))return false;seen.add(x.s);return true;}).slice(0,15);
   if(merged.length)showDD(dd,merged,q);
 }
 
 async function acSearch(q,limit){
-  try{return await naverACJsonp(q,limit);}catch{}
+  // 1) JSONP 시도
+  try{
+    const r=await naverACJsonp(q,limit||30);
+    // items는 [[KOSPI종목들], [KOSDAQ종목들]] 구조 - flat으로 확인
+    if(r?.items&&r.items.flat().length>0)return r;
+  }catch{}
+  // 2) CORS 프록시 순차 시도
   const url='https://ac.finance.naver.com/ac?q='+encodeURIComponent(q)
     +'&q_enc=UTF-8&st=111&sug_typ=1&r_format=json&r_enc=UTF-8'
-    +'&r_lt='+(limit||20)+'&r_unicode=1&r_escape=1';
+    +'&r_lt='+(limit||30)+'&r_unicode=1&r_escape=1';
   for(const mkP of PROXIES){
     try{
       const r=await fetch(mkP(url));if(!r.ok)continue;
       const text=await r.text();
       const raw=text.startsWith('{"contents"')?JSON.parse(text).contents:text;
-      const j=JSON.parse(raw);if(j?.items)return j;
+      const j=JSON.parse(raw);
+      if(j?.items&&j.items.flat().length>0)return j;
     }catch{}
   }
   return null;
