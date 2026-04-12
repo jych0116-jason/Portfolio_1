@@ -463,9 +463,9 @@ function render(){
   document.getElementById('eEmpty').style.display=H.length?'none':'block';
 
   let fil=H.filter(h=>{
-    if(FLT==='normal')return(!h.isDv||!h.dy);
-    if(FLT==='div')return h.isDv&&h.dy>=4&&h.dy<10;
-    if(FLT==='high')return h.isDv&&h.dy>=10;
+    if(FLT==='normal')return(!h.isDv||!h.dy||h.dy<4);   // 배당없음 + 배당4%미만
+    if(FLT==='div')return h.isDv&&h.dy>=4&&h.dy<10;      // 배당4~10%
+    if(FLT==='high')return h.isDv&&h.dy>=10;              // 배당10%+
     return true;
   });
   if(SORT==='val')fil=[...fil].sort((a,b)=>(b.cur||b.avg)*b.qty-(a.cur||a.avg)*a.qty);
@@ -478,9 +478,7 @@ function render(){
     const w=tV>0?val/tV*100:0;
     const ann=h.isDv&&h.dy?val*h.dy/100:0,perPmt=ann/dvN(h.df);
     const isLd=LDS.has(h.id),usd=h.sym&&!isKR(h.sym)&&h.cur?` · $${(h.cur/D.rate).toFixed(2)}`:'';
-    const acctTag=h.acct==='isa'?'<span style="font-size:9px;background:#f0fdf4;color:#166534;padding:1px 5px;border-radius:5px;margin-left:4px">ISA</span>':h.acct==='irp'?'<span style="font-size:9px;background:#eff6ff;color:#1d4ed8;padding:1px 5px;border-radius:5px;margin-left:4px">IRP</span>':'';
     const dcTag=h.isDv&&h.dy>0?`<span class="cbadge">${h.df}</span>`:'';
-    const dyClassBadge=h.isDv&&h.dy>0?`<span style="font-size:9px;background:${h.dy>=10?'#fef2f2':h.dy>=4?'#fffbeb':'#f9f8f5'};color:${h.dy>=10?'#dc2626':h.dy>=4?'#92400e':'#888'};padding:1px 5px;border-radius:5px">${dyClass(h.dy)}</span>`:'';
 
     let dH='';
     if(h.isDv){
@@ -497,15 +495,12 @@ ${h.divHistory.map(d=>`<div class="divrow"><span style="color:#888">${d.date||''
       }
     }
 
-    // 메모
-    const memoHtml=`<div class="memo-row">
-${h.memo?`<div class="memo-disp" onclick="openMemo(${h.id})">📝 ${h.memo}</div>`
-:`<div class="memo-disp" onclick="openMemo(${h.id})" style="color:#bbb">📝 메모 추가...</div>`}
-</div>`;
+    // 메모 (있을 때만 표시)
+    const memoHtml=h.memo?`<div class="memo-disp" onclick="openMemo(${h.id})">📝 ${h.memo}</div>`
+      :`<div class="memo-disp" onclick="openMemo(${h.id})" style="color:#bbb">📝 메모...</div>`;
 
     return `<div class="card">
-<div class="crow"><div><div class="cnrow"><div class="cdot" style="background:${COLORS[ci%COLORS.length]}"></div><span class="cname">${h.n}</span>${dcTag}${acctTag}</div>
-<div style="display:flex;gap:4px;margin-top:3px;margin-left:17px">${dyClassBadge}</div>
+<div class="crow"><div><div class="cnrow"><div class="cdot" style="background:${COLORS[ci%COLORS.length]}"></div><span class="cname">${h.n}</span>${dcTag}</div>
 <div class="csub">${fN(h.qty)}주 · 평단 ${fN(h.avgCost)}원</div></div>
 <div><div class="cval">${fmt(val)}</div><div class="cpnl ${pp>=0?'pos':'neg'}">${pp>=0?'+':''}${fmt(pp)} (${pp2>=0?'+':''}${pp2.toFixed(2)}%)</div></div></div>
 <div class="brow"><div class="bdg bdg-g">${isLd?`<span class="spin"></span>조회 중...`:`현재가 ${fN(cur)}원${usd}`}</div><div class="bdg bdg-s">${w.toFixed(1)}%</div><button class="rbtn" onclick="fetchOne(${h.id})" ${isLd?'disabled':''}>🔄</button></div>
@@ -797,23 +792,91 @@ function hideG(){document.getElementById('gld').style.display='none';if(_gt){cle
 function forceClose(){hideG();LDALL=false;setBusy(false);LDS.clear();render();}
 function setBusy(b){const btn=document.getElementById('rfBtn');btn.className='rfbtn '+(b?'off':'on');btn.textContent=b?'⏳ 조회 중...':'🔄 전체 가격 업데이트';}
 
-/* ===== SEARCH AUTOCOMPLETE ===== */
+/* ===== SEARCH AUTOCOMPLETE (Naver Finance 전종목) ===== */
+let _ddTimer=null;
 function doSearchDD(q){
   const dd=document.getElementById('searchDD');
-  if(!q.trim()){dd.style.display='none';return;}
-  const m=SEARCH_DB.filter(x=>x.n.includes(q)||x.s.toLowerCase().includes(q.toLowerCase())||x.n.toLowerCase().includes(q.toLowerCase())).slice(0,9);
-  if(!m.length){dd.style.display='none';return;}
-  dd.innerHTML=m.map(x=>`<div onclick="pickSearch('${x.n.replace(/'/g,"\\'")}','${x.s}',${x.dy},'${x.df}',${x.isDv?1:0})" style="padding:10px 14px;cursor:pointer;border-bottom:1px solid #f3f3f1">
-    <div style="font-size:13px;font-weight:600">${x.n}</div>
-    <div style="font-size:11px;color:#aaa;margin-top:1px">${x.s} · ${x.isDv?`배당 ${x.dy}% · ${x.df}`:'배당없음'}</div>
-  </div>`).join('');
+  q=q.trim();
+  if(!q){dd.style.display='none';return;}
+
+  // 로컬 DB 즉시 표시
+  const local=SEARCH_DB.filter(x=>
+    x.n.includes(q)||x.s.toLowerCase().includes(q.toLowerCase())
+  ).slice(0,5);
+  showDD(dd,local,q);
+
+  // 네이버 자동완성 API (디바운스 200ms)
+  if(_ddTimer)clearTimeout(_ddTimer);
+  _ddTimer=setTimeout(()=>fetchNaverAC(q,dd),200);
+}
+
+async function fetchNaverAC(q,dd){
+  try{
+    const url=`https://ac.finance.naver.com/ac?q=${encodeURIComponent(q)}&q_enc=UTF-8&st=111&sug_typ=1&u_os=Android&u_ie=utf8&u_timezoneoffset=540&collapse=1&r_format=json&r_enc=UTF-8&r_lt=11&r_unicode=0&r_escape=1`;
+    // CORS 프록시 순차 시도
+    let j=null;
+    for(const mkP of PROXIES){
+      try{
+        const r=await fetch(mkP(url),{signal:AbortSignal.timeout(4000)});
+        if(!r.ok)continue;
+        const text=await r.text();
+        const raw=text.startsWith('{"contents"')?JSON.parse(text).contents:text;
+        j=JSON.parse(raw);
+        break;
+      }catch{}
+    }
+    if(!j||!j.items)return;
+
+    // items: [[KOSPI배열],[KOSDAQ배열]]  각 항목: [이름, 코드, ...]
+    const results=[];
+    (j.items||[]).forEach((group,gi)=>{
+      (group||[]).forEach(item=>{
+        const name=item[0],code=item[1];
+        if(!name||!code)return;
+        const market=gi===0?'KOSPI':'KOSDAQ';
+        const sym=code+(gi===0?'.KS':'.KQ');
+        // 로컬 DB에 추가 정보 있으면 병합
+        const db=SEARCH_DB.find(x=>x.s===sym||x.n===name);
+        results.push({
+          n:name,s:sym,
+          dy:db?db.dy:0,
+          df:db?db.df:'없음',
+          isDv:db?db.isDv:false,
+          market
+        });
+      });
+    });
+
+    // 중복 제거 (로컬 DB와)
+    const seen=new Set();
+    const merged=[
+      ...SEARCH_DB.filter(x=>x.n.includes(q)||x.s.toLowerCase().includes(q.toLowerCase())),
+      ...results
+    ].filter(x=>{if(seen.has(x.s))return false;seen.add(x.s);return true;}).slice(0,12);
+
+    showDD(dd,merged,q);
+  }catch{}
+}
+
+function showDD(dd,items,q){
+  if(!items.length){dd.style.display='none';return;}
+  dd.innerHTML=items.map(x=>{
+    const hl=n=>n.replace(new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`,'gi'),'<b style="color:#2563eb">$1</b>');
+    const mkt=x.market?`<span style="font-size:10px;background:#f3f3f1;color:#888;padding:1px 5px;border-radius:4px;margin-left:4px">${x.market}</span>`:'';
+    return`<div onclick="pickSearch('${x.n.replace(/'/g,"\\'")}','${x.s}',${x.dy},'${x.df}',${x.isDv?1:0})" style="padding:10px 14px;cursor:pointer;border-bottom:1px solid #f3f3f1;display:flex;justify-content:space-between;align-items:center">
+      <div><div style="font-size:13px;font-weight:600">${hl(x.n)}${mkt}</div>
+      <div style="font-size:11px;color:#aaa;margin-top:1px">${x.s}${x.isDv&&x.dy>0?` · 배당 ${x.dy}% · ${x.df}`:''}</div></div>
+    </div>`;
+  }).join('');
   dd.style.display='block';
 }
+
 function pickSearch(n,s,dy,df,isDv){
   document.getElementById('aName').value=n;
   document.getElementById('aDy').value=dy||'';
   document.getElementById('aDf').value=df||'없음';
   document.getElementById('searchDD').style.display='none';
+  if(_ddTimer)clearTimeout(_ddTimer);
 }
 function closeDD(){document.getElementById('searchDD').style.display='none';}
 document.addEventListener('click',e=>{if(!e.target.closest('#searchDD')&&e.target.id!=='aName')closeDD();});
