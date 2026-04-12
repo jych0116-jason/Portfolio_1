@@ -1523,105 +1523,141 @@ function hideG(){document.getElementById('gld').style.display='none';if(_gt){cle
 function forceClose(){hideG();LDALL=false;setBusy(false);LDS.clear();render();}
 function setBusy(b){const btn=document.getElementById('rfBtn');btn.className='rfbtn '+(b?'off':'on');btn.textContent=b?'⏳':'🔄 업데이트';}
 
-const DYN_KEY='krStockDB_v6';
+const DYN_KEY='krStockDB_v7';
 const DYN_TTL=24*3600*1000;
 let DYN_DB=[];
 
 async function initDynDB(){
+  // 캐시 확인 (24시간)
   try{
     const c=JSON.parse(localStorage.getItem(DYN_KEY)||'null');
-    if(c&&Date.now()-c.ts<DYN_TTL&&c.data?.length>100){
+    if(c&&Date.now()-c.ts<DYN_TTL&&c.data?.length>500){
       DYN_DB=c.data;
-      setDbStatus('✅ ETF '+DYN_DB.length+'개',false);
+      setDbStatus('✅ 종목 '+DYN_DB.length+'개',false);
       return;
     }
   }catch{}
 
-  setDbStatus('⏳ ETF 로딩 중...',true);
+  setDbStatus('⏳ 종목 DB 로딩 중...',true);
   const seen=new Set(), result=[];
 
-  // SEARCH_DB 먼저 (배당 정보 정확 보장)
+  // SEARCH_DB 기본 포함
   SEARCH_DB.forEach(x=>{
     if(!seen.has(x.s)){seen.add(x.s);result.push({n:x.n,s:x.s,dy:x.dy||0,df:x.df||'없음',isDv:x.isDv||false});}
   });
 
-  // AC JSONP r_unicode=1 → 한글 깨짐 없음
+  // KRX 전 종목 로드 (KOSPI + KOSDAQ 합산 2500+ 종목)
+  async function loadKrxMarket(mktId){
+    const url='https://www.krx.co.kr/comm/bldAttendant/getJsonData.cmd';
+    const body=new URLSearchParams({
+      bld:'dbms/MDC/STAT/standard/MDCSTAT01501',
+      mktId, // STK=KOSPI, KSQ=KOSDAQ
+      segTpCd:'ALL', share:'1', money:'1', csvxls_isNo:'false'
+    });
+    for(const mkP of PROXIES){
+      try{
+        const r=await fetch(mkP(url),{method:'POST',body});
+        if(!r.ok)continue;
+        const text=await r.text();
+        const raw=text.startsWith('{"contents"')?JSON.parse(text).contents:text;
+        const j=JSON.parse(raw);
+        const items=j?.OutBlock_1||j?.output||[];
+        if(items.length>0)return items;
+      }catch{}
+    }
+    return[];
+  }
+
+  // 방법1: KRX 공식 API
+  let krxOk=false;
+  try{
+    const [kospi,kosdaq]=await Promise.all([loadKrxMarket('STK'),loadKrxMarket('KSQ')]);
+    if(kospi.length+kosdaq.length>100){
+      const mktOf={STK:'.KS',KSQ:'.KQ'};
+      [...kospi.map(x=>({...x,_mkt:'STK'})),...kosdaq.map(x=>({...x,_mkt:'KSQ'}))]
+        .forEach(x=>{
+          const code=(x.ISU_SRT_CD||x.종목코드||'').replace(/\s/g,'');
+          const name=x.ISU_ABBRV||x.ISU_NM||x.종목명||'';
+          if(!code||!name||seen.has(code))return;
+          seen.add(code);
+          const sym=code+mktOf[x._mkt];
+          const db=SEARCH_DB.find(d=>d.s===sym);
+          const div=db||guessEtfDiv(name);
+          result.push({n:name,s:sym,dy:div.dy||0,df:div.df||'없음',isDv:div.isDv||false});
+        });
+      krxOk=true;
+    }
+  }catch{}
+
+  // 방법2: KRX 실패 시 Yahoo Finance 스크리너로 상위 종목 로드
+  if(!krxOk){
+    const screens=[
+      'https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved?count=250&formatted=false&scrIds=ms_kr_stock',
+      'https://query2.finance.yahoo.com/v1/finance/screener?crumb=&lang=ko-KR&region=KR&formatted=false&corsDomain=finance.yahoo.com',
+    ];
+    for(const url of screens){
+      for(const mkP of [u=>u,...PROXIES]){
+        try{
+          const r=await fetch(mkP(url));if(!r.ok)continue;
+          const text=await r.text();
+          const j=JSON.parse(text.startsWith('{"contents"')?JSON.parse(text).contents:text);
+          const quotes=j?.finance?.result?.[0]?.quotes||[];
+          if(quotes.length<10)continue;
+          quotes.forEach(x=>{
+            const sym=x.symbol||'';
+            const name=x.shortname||x.longname||sym;
+            if(!sym||!name||seen.has(sym))return;
+            seen.add(sym);
+            const db=SEARCH_DB.find(d=>d.s===sym);
+            const div=db||guessEtfDiv(name);
+            result.push({n:name,s:sym,dy:div.dy||0,df:div.df||'없음',isDv:div.isDv||false});
+          });
+          if(result.length>200)break;
+        }catch{}
+      }
+    }
+  }
+
+  // 방법3: ETF 브랜드 쿼리 보강 (기존 방식 유지)
   async function acQuery(q){
     try{return await naverACJsonp(q,200);}catch{}
-    // JSONP 실패 → 프록시
     const url='https://ac.finance.naver.com/ac?q='+encodeURIComponent(q)+'&q_enc=UTF-8&st=111&sug_typ=1&r_format=json&r_enc=UTF-8&r_lt=200&r_unicode=1&r_escape=1';
     for(const mkP of PROXIES){
       try{
         const r=await fetch(mkP(url));if(!r.ok)continue;
         const t=await r.text();
         const raw=t.startsWith('{"contents"')?JSON.parse(t).contents:t;
-        const j=JSON.parse(raw);if(j?.items)return j;
+        const j=JSON.parse(raw);
+        if(j?.items&&j.items.flat().length>0)return j;
       }catch{}
     }
     return null;
   }
-
   function pushItems(data){
-    const items=acItems(data)||[];
-    items.forEach((group,gi)=>{
-      (group||[]).forEach(item=>{
-        const name=item[0],code=item[1];
-        if(!name||!code||!/^[A-Za-z0-9]{6,7}$/.test(code)||seen.has(code))return;
+    (acItems(data)||[]).forEach((group,gi)=>{
+      (Array.isArray(group)?group:[]).forEach(item=>{
+        if(!Array.isArray(item))return;
+        const name=String(item[0]||''),code=String(item[1]||'');
+        if(!name||!/^\d{5,6}$/.test(code)||seen.has(code))return;
         seen.add(code);
-        const sym=code+(gi===0?'.KS':'.KQ');
+        const sym=code.padStart(6,'0')+(gi===0?'.KS':'.KQ');
         const db=SEARCH_DB.find(x=>x.n===name);
         const div=db||guessEtfDiv(name);
         result.push({n:name,s:sym,dy:div.dy||0,df:div.df||'없음',isDv:div.isDv||false});
       });
     });
   }
-
-  // 브랜드 × 키워드 조합으로 전체 커버
-  // 각 브랜드당 여러 키워드로 나눠 검색 → AC 200개 제한 우회
-  const queries=[
-    // KODEX
-    'KODEX 200','KODEX 미국','KODEX 나스닥','KODEX S&P','KODEX 배당','KODEX 고배당',
-    'KODEX 국채','KODEX 금리','KODEX 금융','KODEX 반도체','KODEX 레버리지','KODEX 인버스',
-    'KODEX 차이나','KODEX 일본','KODEX 에너지','KODEX 헬스','KODEX AI','KODEX 2차전지',
-    'KODEX Top','KODEX 삼성','KODEX 커버드','KODEX 위클리','KODEX 테크','KODEX 바이오',
-    // TIGER
-    'TIGER 미국','TIGER 나스닥','TIGER S&P','TIGER 배당','TIGER 200',
-    'TIGER 채권','TIGER 국채','TIGER 금리','TIGER 반도체','TIGER 레버리지',
-    'TIGER 차이나','TIGER 일본','TIGER 헬스','TIGER AI','TIGER 2차전지',
-    'TIGER 커버드','TIGER 위클리','TIGER 테크','TIGER 바이오','TIGER 은행',
-    // ACE
-    'ACE 미국','ACE 나스닥','ACE S&P','ACE 배당','ACE 200',
-    'ACE 채권','ACE 국채','ACE 금리','ACE 반도체','ACE 레버리지',
-    'ACE 차이나','ACE 일본','ACE 헬스','ACE AI','ACE 2차전지',
-    'ACE 커버드','ACE 위클리','ACE 테크','ACE 바이오','ACE 고배당',
-    // RISE
-    'RISE 미국','RISE 나스닥','RISE S&P','RISE 배당','RISE 200',
-    'RISE 채권','RISE 국채','RISE 금리','RISE 반도체','RISE 레버리지',
-    'RISE 차이나','RISE 일본','RISE 헬스','RISE AI','RISE 2차전지',
-    'RISE 커버드','RISE 위클리','RISE 테크','RISE 바이오','RISE 고배당',
-    // 기타 운용사
-    'SOL 미국','SOL 배당','SOL 나스닥','SOL S&P','SOL 채권',
-    'HANARO 미국','HANARO 배당','HANARO 200','HANARO 채권',
-    'KBSTAR 200','KBSTAR 미국','KBSTAR 배당','KBSTAR 채권',
-    'ARIRANG 200','ARIRANG 배당','ARIRANG 미국',
-    'TIMEFOLIO 미국','TIMEFOLIO 배당','TIMEFOLIO AI',
-    'PLUS 미국','PLUS 배당','FOCUS 미국',
-  ];
-
-  let done=0;
-  for(const q of queries){
+  const etfQ=['KODEX','TIGER','ACE','RISE','SOL','HANARO','KBSTAR','ARIRANG','TIMEFOLIO','PLUS'];
+  for(const q of etfQ){
     const data=await acQuery(q);
     pushItems(data);
-    done++;
-    // 50개마다 상태 업데이트
-    if(done%10===0)setDbStatus('⏳ ETF 로딩 중... '+result.length+'개',true);
   }
 
   DYN_DB=result;
-  if(result.length>10){
+  if(result.length>50){
     try{localStorage.setItem(DYN_KEY,JSON.stringify({ts:Date.now(),data:DYN_DB}));}catch{}
   }
-  setDbStatus('✅ ETF '+DYN_DB.length+'개',false);
+  setDbStatus('✅ 종목 '+DYN_DB.length+'개',false);
 }
 
 function setDbStatus(msg,loading){
@@ -1662,29 +1698,82 @@ function doSearchDD(q){
 }
 
 async function fetchNaverSearch(q,dd,localCount){
+  // 숫자 코드 입력
   if(/^\d{4,6}$/.test(q)){
     const c=q.padStart(6,'0');
-    const found=getAllDB().find(x=>x.s.replace(/\.(KS|KQ)$/,'')=== c);
-    if(found){showDD(dd,[found],q);return;}
-    showDD(dd,[{n:c,s:c+'.KS',dy:0,df:'없음',isDv:false,market:'국내주식',_isCode:true}],q);
-    // 6자리 코드로 Yahoo 검색
-    const r=await yahooSearch(c+'.KS');
-    if(r.length)showDD(dd,r,q);
+    const db=getAllDB().find(x=>x.s.replace(/\.(KS|KQ)$/,'')=== c);
+    if(db){showDD(dd,[db],q);return;}
+    // 모르는 코드 → 실시간 조회
+    const r=await krSearch(c);
+    showDD(dd,r.length?r:[{n:c,s:c+'.KS',dy:0,df:'없음',isDv:false,market:'KRX'}],q);
     return;
   }
-  // Yahoo Finance 검색 (국내주식 포함 전 종목)
-  const yR=await yahooSearch(q);
-  const seen=new Set();
-  const ql=q.toLowerCase();
-  const local=getAllDB().filter(x=>x.n.includes(q)||x.n.toLowerCase().includes(ql));
-  const merged=[...local,...yR]
-    .filter(x=>{if(seen.has(x.s))return false;seen.add(x.s);return true;}).slice(0,15);
+  // 로컬 DB에 충분한 결과 있으면 API 불필요
+  if(localCount>=5)return;
+  // 로컬 결과 부족하면 실시간 검색
+  const isKor=/[가-힣]/.test(q);
+  const apiR=isKor?await krSearch(q):await usSearch(q);
+  if(!apiR.length)return;
+  const seen=new Set(getAllDB().filter(x=>x.n.includes(q)||x.s.toLowerCase().includes(q.toLowerCase())).map(x=>x.s));
+  const merged=[...getAllDB().filter(x=>x.n.includes(q)||x.n.toLowerCase().includes(q.toLowerCase())),...apiR.filter(x=>!seen.has(x.s))].slice(0,15);
   if(merged.length)showDD(dd,merged,q);
 }
 
-async function yahooSearch(q){
+// 국내주식 검색 - 네이버 모바일 증권 API
+async function krSearch(q){
+  const urls=[
+    'https://m.stock.naver.com/api/search/all?keyword='+encodeURIComponent(q)+'&page=0&pageSize=20',
+    'https://ac.finance.naver.com/ac?q='+encodeURIComponent(q)+'&q_enc=UTF-8&st=111&sug_typ=1&r_format=json&r_enc=UTF-8&r_lt=30&r_unicode=1&r_escape=1'
+  ];
+  for(const url of urls){
+    for(const mkP of PROXIES){
+      try{
+        const r=await fetch(mkP(url));
+        if(!r.ok)continue;
+        const text=await r.text();
+        const raw=text.startsWith('{"contents"')?JSON.parse(text).contents:text;
+        const j=JSON.parse(raw);
+
+        // 네이버 모바일 API 형식
+        if(j?.result?.stock){
+          const out=[];
+          (j.result.stock||[]).forEach(x=>{
+            const sym=(x.code||x.itemCode||'')+(x.market==='KOSDAQ'?'.KQ':'.KS');
+            const name=x.name||x.itemName||'';
+            if(!sym||!name)return;
+            const db=getAllDB().find(d=>d.s===sym);
+            const div=db||guessEtfDiv(name);
+            out.push({n:name,s:sym,dy:div.dy||0,df:div.df||'없음',isDv:div.isDv||false,market:x.market||'KRX'});
+          });
+          if(out.length)return out;
+        }
+
+        // 네이버 AC 형식 [[kospi], [kosdaq]]
+        if(j?.items){
+          const out=[];
+          (j.items||[]).forEach((group,gi)=>{
+            (Array.isArray(group)?group:[]).forEach(item=>{
+              if(!Array.isArray(item))return;
+              const name=String(item[0]||''), code=String(item[1]||'');
+              if(!name||!/^\d{5,6}$/.test(code))return;
+              const sym=code.padStart(6,'0')+(gi===0?'.KS':'.KQ');
+              const db=getAllDB().find(d=>d.s===sym);
+              const div=db||guessEtfDiv(name);
+              out.push({n:name,s:sym,dy:div.dy||0,df:div.df||'없음',isDv:div.isDv||false,market:gi===0?'KOSPI':'KOSDAQ'});
+            });
+          });
+          if(out.length)return out;
+        }
+      }catch{}
+    }
+  }
+  return[];
+}
+
+// 미국주식/ETF 검색 - Yahoo Finance
+async function usSearch(q){
   const url='https://query1.finance.yahoo.com/v1/finance/search?q='+encodeURIComponent(q)
-    +'&lang=ko&region=KR&quotesCount=15&newsCount=0&enableFuzzyQuery=false';
+    +'&lang=en-US&region=US&quotesCount=15&newsCount=0&enableFuzzyQuery=false';
   for(const mkP of [u=>u,...PROXIES]){
     try{
       const r=await fetch(mkP(url));
@@ -1692,17 +1781,17 @@ async function yahooSearch(q){
       const text=await r.text();
       const j=JSON.parse(text.startsWith('{"contents"')?JSON.parse(text).contents:text);
       const quotes=j?.finance?.result?.[0]?.quotes||j?.quotes||[];
-      const results=[];
-      quotes.forEach(q=>{
-        const sym=q.symbol||'';
-        const name=q.shortname||q.longname||sym;
-        if(!sym||!name)return;
-        const db=getAllDB().find(x=>x.s===sym||x.n===name);
+      const out=[];
+      quotes.forEach(x=>{
+        const sym=x.symbol||'';
+        const name=x.shortname||x.longname||sym;
+        if(!sym||!name||sym.includes('^'))return;
+        const db=getAllDB().find(d=>d.s===sym);
         const div=db||guessEtfDiv(name);
-        const market=sym.endsWith('.KS')?'KOSPI':sym.endsWith('.KQ')?'KOSDAQ':'해외';
-        results.push({n:name,s:sym,dy:div.dy||0,df:div.df||'없음',isDv:div.isDv||false,market});
+        const mkt=sym.endsWith('.KS')?'KOSPI':sym.endsWith('.KQ')?'KOSDAQ':x.exchDisp||'US';
+        out.push({n:name,s:sym,dy:div.dy||0,df:div.df||'없음',isDv:div.isDv||false,market:mkt});
       });
-      if(results.length)return results;
+      if(out.length)return out;
     }catch{}
   }
   return[];
