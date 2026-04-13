@@ -2888,11 +2888,11 @@ function parseSsText(text){
   const seen=new Set();
 
   // 계좌 분류
-  const taxKw=['ISA','IRP','연금','연금저축','개인형','개인종합','각시','신연금','종합자산'];
+  const taxKw=['ISA','IRP','연금','연금저축','개인형','개인종합','신연금','종합자산'];
   const genKw=['위탁','일반','각시toss','각시Toss','각시TOSS'];
   function acctOf(s){
-    if(taxKw.some(k=>s.includes(k)))return'tax';
     if(genKw.some(k=>s.includes(k)))return'general';
+    if(taxKw.some(k=>s.includes(k)))return'tax';
     return null;
   }
 
@@ -2930,13 +2930,12 @@ function parseSsText(text){
   while((m=pLine.exec(text))!==null){
     const qty=N(m[2]), price=N(m[3]);
     if(qty<=0||price<=0)continue;
-    // 계좌명: 매칭된 이름 or 앞 줄 탐색
+    // 계좌명: 매칭된 이름 or 바로 앞 줄만 (넓은 컨텍스트 사용 금지)
     let acctName=m[1]?m[1].trim():'';
     if(!acctName){
-      // 앞 50자에서 계좌 키워드 찾기
-      const ctx=text.slice(Math.max(0,m.index-60),m.index);
-      const ctxLines=ctx.split(/[\n\r]+/).filter(Boolean);
-      acctName=ctxLines[ctxLines.length-1]||'';
+      const before=text.slice(Math.max(0,m.index-40),m.index);
+      const beforeLines=before.split(/[\n\r]+/).filter(Boolean);
+      acctName=beforeLines[beforeLines.length-1]||'';
     }
     const acct=acctOf(acctName)||'general';
     const name=topName||acctName||'종목';
