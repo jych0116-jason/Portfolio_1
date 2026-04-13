@@ -1765,19 +1765,20 @@ function render(){
   const de=document.getElementById('hDiv');
   if(mAll>0){
     de.style.display='block';
+    const selAll=FLT==='all', selNorm=FLT==='normal', selTax=FLT==='tax';
     de.innerHTML=`
 <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px;width:100%">
-  <div onclick="setFlt('all')" style="background:linear-gradient(145deg,#1e40af,#3b82f6);border-radius:16px;padding:14px 12px;cursor:pointer;box-shadow:0 4px 14px rgba(37,99,235,.3)">
+  <div onclick="setFlt('all')" style="background:linear-gradient(145deg,#1e40af,#3b82f6);border-radius:16px;padding:14px 12px;cursor:pointer;box-shadow:${selAll?'0 0 0 3px #fff,0 0 0 5px #2563eb':'0 4px 14px rgba(37,99,235,.3)'};transition:box-shadow .2s">
     <div style="font-size:10px;color:rgba(255,255,255,.75);font-weight:600;margin-bottom:8px">🪙 전체</div>
     <div style="font-size:18px;font-weight:800;color:#fff;letter-spacing:-.5px;line-height:1.1">${fmt(Math.round(mAll))}</div>
     <div style="font-size:10px;color:rgba(255,255,255,.55);margin-top:5px">연 ${fmt(Math.round(mAll*12))}</div>
   </div>
-  <div onclick="setFlt('normal')" style="background:#fff;border:1.5px solid #e8e3d8;border-radius:16px;padding:14px 12px;cursor:pointer">
-    <div style="font-size:10px;color:#aaa;font-weight:600;margin-bottom:8px">📂 일반</div>
+  <div onclick="setFlt('normal')" style="background:#fff;border:${selNorm?'2.5px solid #2563eb':'1.5px solid #e8e3d8'};border-radius:16px;padding:14px 12px;cursor:pointer;box-shadow:${selNorm?'0 4px 14px rgba(37,99,235,.15)':'none'};transition:all .2s">
+    <div style="font-size:10px;color:${selNorm?'#2563eb':'#aaa'};font-weight:600;margin-bottom:8px">📂 일반</div>
     <div style="font-size:18px;font-weight:800;color:#1c1917;letter-spacing:-.5px;line-height:1.1">${fmt(Math.round(mGen))}</div>
     <div style="font-size:10px;color:#bbb;margin-top:5px">${mAll>0?Math.round(mGen/mAll*100):0}%</div>
   </div>
-  <div onclick="setFlt('tax')" style="background:linear-gradient(145deg,#f0fdf4,#dcfce7);border:1.5px solid #bbf7d0;border-radius:16px;padding:14px 12px;cursor:pointer">
+  <div onclick="setFlt('tax')" style="background:linear-gradient(145deg,#f0fdf4,#dcfce7);border:${selTax?'2.5px solid #16a34a':'1.5px solid #bbf7d0'};border-radius:16px;padding:14px 12px;cursor:pointer;box-shadow:${selTax?'0 4px 14px rgba(22,163,74,.2)':'none'};transition:all .2s">
     <div style="font-size:10px;color:#16a34a;font-weight:600;margin-bottom:8px">🌿 절세</div>
     <div style="font-size:18px;font-weight:800;color:#15803d;letter-spacing:-.5px;line-height:1.1">${fmt(Math.round(mTax))}</div>
     <div style="font-size:10px;color:#86efac;margin-top:5px">${mAll>0?Math.round(mTax/mAll*100):0}%</div>
