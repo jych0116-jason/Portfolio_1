@@ -2997,20 +2997,28 @@ function parseSsText(text){
     return'general'; // 모르면 일반
   }
 
-  // 상단 종목명/티커 추출
+  // 상단 종목명/티커 추출 (유연하게)
   let topName='', topTicker='';
-  for(let i=0;i<Math.min(lines.length,10);i++){
-    // 미국 ETF/주식 티커 (영문 대문자 2~5자)
-    const tkM=lines[i].match(/^([A-Z]{2,5})\s+\$[\d.]+/);
-    if(tkM){topTicker=tkM[1]; if(!topName)topName=topTicker; break;}
-    if(/^(RISE|KODEX|TIGER|ACE|SOL|HANARO|TIMEFOLIO|KBSTAR|ARIRANG|PLUS)\s/.test(lines[i])){
-      topName=lines[i].replace(/\s*\d{6}.*$/,'').trim(); break;
+  for(let i=0;i<Math.min(lines.length,15);i++){
+    const l=lines[i];
+    // 패턴1: "GPIQ $51.52" / "GPIQ$51.52" / "GPIQ S51.52" (OCR $ → S 오인식 대응)
+    const tkM=l.match(/^([A-Z]{2,6})\s*[\$S]?\s*([\d,]+\.\d+)/);
+    if(tkM&&tkM[1].length>=2&&!['USD','ETF','KRW','ISA','IRP'].includes(tkM[1])){
+      topTicker=tkM[1]; topName=topTicker; break;
     }
-    // "JPMorgan ..." 같은 영문 전체 이름 → 다음 줄 티커 찾기
-    const cm=lines[i].match(/^(.+?)\s+\d{6}/);
+    // 패턴2: 줄 전체가 티커 단독 (GPIQ\n)
+    if(/^[A-Z]{2,6}$/.test(l)&&!['USD','ETF','KRW'].includes(l)){
+      topTicker=l; topName=l; break;
+    }
+    // 패턴3: 한국 ETF 브랜드
+    if(/^(RISE|KODEX|TIGER|ACE|SOL|HANARO|TIMEFOLIO|KBSTAR|ARIRANG|PLUS)\s/.test(l)){
+      topName=l.replace(/\s*[\d]{6}.*$/,'').trim(); break;
+    }
+    // 패턴4: 종목명 + 6자리 코드
+    const cm=l.match(/^(.+?)\s+\d{6}/);
     if(cm){topName=cm[1].trim(); break;}
   }
-  // 티커가 있으면 DB에서 종목명 찾기
+  // 티커로 DB 매칭
   if(topTicker){
     const db=getAllDB().find(x=>x.s===topTicker||x.n===topTicker);
     if(db)topName=db.n;
