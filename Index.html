@@ -2865,14 +2865,17 @@ async function runSsAnalyze(){
 
     SS_PARSED = parseSsText(text);
 
+    // 항상 원본 텍스트 표시 (디버깅)
+    const rawBox=`<details style="margin-bottom:8px"><summary style="font-size:11px;color:#aaa;cursor:pointer">📄 OCR 원본 텍스트 보기</summary><pre style="font-size:10px;color:#666;background:#f9f8f5;padding:8px;border-radius:8px;overflow-x:auto;white-space:pre-wrap;word-break:break-all">${text.replace(/</g,'&lt;')}</pre></details>`;
+
     if(!SS_PARSED.length){
-      res.innerHTML='<div style="background:#fff7ed;border-radius:10px;padding:12px;font-size:12px;color:#d97706">⚠️ 종목 패턴을 찾지 못했습니다<br><small style="color:#aaa;word-break:break-all">'+text.slice(0,300).replace(/</g,'&lt;')+'</small></div>';
+      res.innerHTML='<div style="background:#fff7ed;border-radius:10px;padding:12px;font-size:12px;color:#d97706">⚠️ 종목 패턴을 찾지 못했습니다</div>'+rawBox;
       res.style.display='block';
       btn.style.display='block'; btn.textContent='🔄 재시도';
       return;
     }
 
-    renderSsParsed();
+    renderSsParsed(rawBox);
   }catch(e){
     st.style.display='none';
     res.innerHTML='<div style="background:#fef2f2;border-radius:10px;padding:12px;font-size:12px;color:#dc2626">❌ '+(e.message||'오류 발생')+'</div>';
@@ -2887,88 +2890,66 @@ function parseSsText(text){
   const results=[];
   const seen=new Set();
 
-  // 계좌 분류
-  const taxKw=['ISA','IRP','연금','연금저축','개인형','개인종합','신연금','종합자산'];
-  const genKw=['위탁','일반','각시toss','각시Toss','각시TOSS'];
+  // genKw 먼저 — 위탁/각시toss는 무조건 일반
+  const genKw=['위탁','일반계좌','일반','각시toss','각시Toss','각시TOSS','toss'];
+  const taxKw=['각시ISA','ISA','IRP','연금저축','연금','개인형','개인종합','신연금','종합자산'];
   function acctOf(s){
-    if(genKw.some(k=>s.includes(k)))return'general';
-    if(taxKw.some(k=>s.includes(k)))return'tax';
-    return null;
+    if(!s)return'general';
+    for(const k of genKw)if(s.includes(k))return'general';
+    for(const k of taxKw)if(s.includes(k))return'tax';
+    return'general'; // 모르면 일반
   }
 
-  function push(name,qty,price,acct){
-    if(!name||qty<=0||qty>9999999||price<=0||price>9999999)return;
-    const k=name+'|'+qty+'|'+price;
-    if(seen.has(k))return;
+  // 상단 종목명 추출
+  let topName='';
+  for(let i=0;i<Math.min(lines.length,10);i++){
+    if(/^(RISE|KODEX|TIGER|ACE|SOL|HANARO|TIMEFOLIO|KBSTAR|ARIRANG|PLUS)\s/.test(lines[i])){
+      topName=lines[i].replace(/\s*\d{6}.*$/,'').trim(); break;
+    }
+    const cm=lines[i].match(/^(.+?)\s+\d{6}/);
+    if(cm){topName=cm[1].trim(); break;}
+  }
+
+  // 줄 단위 파싱: "N주 · M원" 줄 찾으면 바로 위 줄이 계좌명
+  const pNum=/([\d,]+)\s*주\s*[·・·\-\.]\s*([\d,]+)\s*원/;
+  for(let i=0;i<lines.length;i++){
+    const m=lines[i].match(pNum);
+    if(!m)continue;
+    const qty=N(m[1]), price=N(m[2]);
+    if(qty<=0||qty>9999999||price<=0||price>9999999)continue;
+
+    // 계좌명: 같은 줄 앞부분 → 없으면 바로 위 줄
+    const before=lines[i].slice(0,lines[i].indexOf(m[0])).trim();
+    const prevLine=i>0?lines[i-1].trim():'';
+    const acctSrc=before||prevLine;
+    const acct=acctOf(acctSrc);
+
+    const k=qty+'|'+price;
+    if(seen.has(k))continue;
     seen.add(k);
-    const db=getAllDB().find(x=>x.n===name||(name.length>3&&x.n.includes(name))||(x.n.length>3&&name.includes(x.n)));
+
+    const name=topName||acctSrc||'종목';
+    const db=getAllDB().find(x=>topName&&(x.n===topName||(topName.length>4&&x.n.includes(topName))||(x.n.length>4&&topName.includes(x.n))));
     results.push({name:db?db.n:name.slice(0,30),qty,avgPrice:price,acct,db});
   }
 
-  // ── 1단계: 상단 종목명 추출 (6자리 코드 앞에 있는 종목명) ──
-  let topName='', topCode='';
-  for(let i=0;i<Math.min(lines.length,8);i++){
-    const codeMatch=lines[i].match(/\b(\d{6})\b/);
-    if(codeMatch){
-      topCode=codeMatch[1];
-      // 종목명: 같은 줄 코드 앞부분 or 바로 이전 줄
-      const before=lines[i].slice(0,lines[i].indexOf(codeMatch[0])).trim();
-      topName=before||lines[i-1]||'';
-      topName=topName.replace(/\s*\d+.*$/,'').trim();
-      break;
-    }
-    // RISE/KODEX/TIGER 등으로 시작하는 긴 종목명
-    if(/^(RISE|KODEX|TIGER|ACE|SOL|HANARO|TIMEFOLIO|KBSTAR|ARIRANG|PLUS)/.test(lines[i])){
-      topName=lines[i]; break;
-    }
-  }
-
-  // ── 2단계: 계좌별 행 파싱 "N주 · M원" 패턴 ──
-  // 같은 줄 패턴: "계좌명 N주·M원" or "N주·M원"
-  const pLine=/([가-힣A-Za-z][가-힣A-Za-z0-9\s]*?)?\s*([\d,]+)\s*주\s*[·・\·\·]\s*([\d,]+)\s*원/g;
-  let m;
-  while((m=pLine.exec(text))!==null){
-    const qty=N(m[2]), price=N(m[3]);
-    if(qty<=0||price<=0)continue;
-    // 계좌명: 매칭된 이름 or 바로 앞 줄만 (넓은 컨텍스트 사용 금지)
-    let acctName=m[1]?m[1].trim():'';
-    if(!acctName){
-      const before=text.slice(Math.max(0,m.index-40),m.index);
-      const beforeLines=before.split(/[\n\r]+/).filter(Boolean);
-      acctName=beforeLines[beforeLines.length-1]||'';
-    }
-    const acct=acctOf(acctName)||'general';
-    const name=topName||acctName||'종목';
-    push(name,qty,price,acct);
-  }
-
-  // ── 3단계: 두 줄 패턴 "N주" 다음 줄 "M원" ──
-  for(let i=0;i<lines.length-1;i++){
-    const mQ=lines[i].match(/^([\d,]+)\s*주$/);
-    const mP=lines[i+1].match(/^([\d,]+)\s*원$/);
-    if(!mQ||!mP)continue;
-    const qty=N(mQ[1]), price=N(mP[1]);
-    const ctx=lines.slice(Math.max(0,i-4),i).join(' ');
-    const acct=acctOf(ctx)||'general';
-    const name=topName||'종목';
-    push(name,qty,price,acct);
-  }
-
-  // ── 4단계: 보유량+평단가 형식 (단일 종목 요약화면) ──
+  // 보유량+평단가 형식 (결과 없을 때만)
   if(!results.length){
     const mQty=text.match(/보유[량주]?\s*[\n\r]?\s*([\d,]+)\s*주/);
     const mPrc=text.match(/평단[가]?\s*[\n\r]?\s*([\d,]+)\s*원/);
     if(mQty&&mPrc){
-      const qty=N(mQty[1]), price=N(mPrc[1]);
-      const acct=taxKw.some(k=>text.includes(k))?'tax':'general';
-      push(topName||'종목',qty,price,acct);
+      const qty=N(mQty[1]),price=N(mPrc[1]);
+      if(!seen.has(qty+'|'+price)){
+        const db=getAllDB().find(x=>topName&&x.n.includes(topName));
+        results.push({name:db?db.n:topName||'종목',qty,avgPrice:price,acct:'general',db});
+      }
     }
   }
-
   return results;
 }
 
-function renderSsParsed(){
+function renderSsParsed(rawBox){
+  rawBox=rawBox||'';
   const rows=SS_PARSED.map((x,i)=>{
     const dbMatch=x.db;
     const chip=dbMatch?`<span style="font-size:10px;background:#f0fdf4;color:#16a34a;padding:1px 6px;border-radius:4px;margin-left:4px">DB매칭</span>`:'';
@@ -2984,7 +2965,8 @@ function renderSsParsed(){
     <div style="background:#f0fdf4;border-radius:10px;padding:9px 12px;margin-bottom:10px">
       <div style="font-size:12px;font-weight:700;color:#16a34a">✅ ${SS_PARSED.length}개 종목 인식</div>
     </div>
-    <div style="border:1px solid #e8e3d8;border-radius:10px;padding:0 12px">${rows}</div>`;
+    <div style="border:1px solid #e8e3d8;border-radius:10px;padding:0 12px;margin-bottom:8px">${rows}</div>
+    ${rawBox}`;
   document.getElementById('ssResult').style.display='block';
   document.getElementById('ssImportBtn').style.display='block';
   document.getElementById('ssAnalyzeBtn').style.display='block';
