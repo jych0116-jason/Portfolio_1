@@ -2889,7 +2889,7 @@ function parseSsText(text){
 
   // 계좌 분류
   const taxKw=['ISA','IRP','연금','연금저축','개인형','개인종합','각시','신연금','종합자산'];
-  const genKw=['위탁','일반'];
+  const genKw=['위탁','일반','각시toss','각시Toss','각시TOSS'];
   function acctOf(s){
     if(taxKw.some(k=>s.includes(k)))return'tax';
     if(genKw.some(k=>s.includes(k)))return'general';
