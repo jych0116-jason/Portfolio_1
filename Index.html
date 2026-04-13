@@ -2682,21 +2682,32 @@ function renderDivHistory(h,id){
   }
   const isUS=!(isKR(h.sym||'')||isKRName(h.n||''));
   const rate=D.rate||1380;
-  // 표시 함수
   function fmtDiv(a){
-    if(isUS) return '$'+a.toFixed(4).replace(/0+$/,'').replace(/\.$/,'');
+    if(isUS) return`<span style="color:#2563eb">$${a.toFixed(4).replace(/0+$/,'').replace(/\.$/,'')}</span> <span style="font-size:10px;color:#aaa">(≈${fN(Math.round(a*rate))}원)</span>`;
     return fN(Math.round(a))+'원';
   }
   function fmtMyDiv(a){
-    if(isUS) return '$'+( a*h.qty ).toFixed(2);
+    if(isUS){
+      const usd=(a*h.qty).toFixed(2);
+      const krw=fmt(Math.round(a*h.qty*rate));
+      return `<span style="color:#2563eb">$${usd}</span> <span style="color:#bbb">≈${krw}</span>`;
+    }
     return fmt(Math.round(a*h.qty));
   }
   function fmtTot(tot){
-    if(isUS) return '$'+tot.toFixed(4).replace(/0+$/,'').replace(/\.$/,'');
+    if(isUS){
+      const usd='$'+tot.toFixed(4).replace(/0+$/,'').replace(/\.$/,'');
+      const krw=fmt(Math.round(tot*rate));
+      return `<span style="color:#2563eb">${usd}</span> <span style="font-size:11px;font-weight:400;color:#aaa">≈${krw}/주</span>`;
+    }
     return fN(Math.round(tot))+'원';
   }
   function fmtTotMy(tot){
-    if(isUS) return '$'+(tot*h.qty).toFixed(2)+' (≈'+fmt(Math.round(tot*h.qty*rate))+')';
+    if(isUS){
+      const usd='$'+(tot*h.qty).toFixed(2);
+      const krw=fmt(Math.round(tot*h.qty*rate));
+      return `<span style="color:#2563eb">${usd}</span> <span style="color:#bbb">≈${krw}</span>`;
+    }
     return fmt(Math.round(tot*h.qty));
   }
 
@@ -2712,7 +2723,7 @@ function renderDivHistory(h,id){
         <span style="font-size:12px;color:#666;font-weight:500">${d.date||''}</span>
         <div style="text-align:right">
           <span style="font-size:12px;font-weight:700;color:#d97706">${fmtDiv(a)}</span>
-          <span style="font-size:11px;color:#aaa;margin-left:6px">→ 내 배당 ${fmtMyDiv(a)}</span>
+          <span style="font-size:11px;color:#aaa;margin-left:6px">→ 내 배당 <span style="color:#888">${fmtMyDiv(a)}</span></span>
         </div>
       </div>
       <div style="height:4px;background:#f3f3f1;border-radius:2px"><div style="height:4px;background:#d97706;border-radius:2px;width:${barW}%"></div></div>
@@ -2721,9 +2732,9 @@ function renderDivHistory(h,id){
   return`<div style="background:#fff;border:1px solid #e8e3d8;border-radius:10px;padding:10px 12px;margin-bottom:12px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">
       <span style="font-size:12px;font-weight:700;color:#555">📋 최근 6개월 배당${isEstimated?'<span style="font-size:10px;color:#aaa;font-weight:400;margin-left:5px">(배당률 기반 추정)</span>':''}</span>
-      <span style="font-size:12px;font-weight:700;color:#d97706">주당 합계 ${fmtTot(tot)}</span>
+      <span style="font-size:12px;font-weight:700;color:#d97706">주당 합계 <span>${fmtTot(tot)}</span></span>
     </div>
-    <div style="font-size:11px;color:#aaa;margin-bottom:8px">내 수령액 합계 ${fmtTotMy(tot)}</div>
+    <div style="font-size:11px;color:#aaa;margin-bottom:8px">내 수령액 합계 <span style="color:#888">${fmtTotMy(tot)}</span></div>
     ${rows}
     <button onclick="fetchDivs(${id})" style="margin-top:8px;font-size:10px;color:#aaa;border:none;background:none;cursor:pointer;padding:0">🔄 재조회</button>
   </div>`;
@@ -3855,7 +3866,7 @@ ${errTxt}
   </div>
   <div style="display:flex;justify-content:space-between;padding:5px 0;border-top:1px solid #e8e3d8">
     <span style="color:#aaa;font-size:12px">현재가</span>
-    <span style="font-size:12px;font-weight:600">${fN(cur)}원 <button onclick="fetchOne(${id})" style="font-size:10px;padding:1px 6px;border-radius:4px;border:1px solid #bfdbfe;background:#eff6ff;color:#2563eb;cursor:pointer">🔄</button></span>
+    <span style="font-size:12px;font-weight:600">${isUS?`<span style="color:#2563eb">$${(cur/D.rate).toFixed(2)}</span> <span style="color:#aaa;font-weight:400">(≈${fN(cur)}원)</span>`:fN(cur)+'원'} <button onclick="fetchOne(${id})" style="font-size:10px;padding:1px 6px;border-radius:4px;border:1px solid #bfdbfe;background:#eff6ff;color:#2563eb;cursor:pointer">🔄</button></span>
   </div>
   <div style="display:flex;justify-content:space-between;padding:5px 0;border-top:1px solid #f3f3f1">
     <span style="color:#aaa;font-size:12px">평균단가</span>
