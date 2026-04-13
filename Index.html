@@ -1732,8 +1732,46 @@ function render(){
     rpe.className='rpnl-hdr '+(totalReal>=0?'pos':'neg');
     rpe.textContent=`실현손익 ${totalReal>=0?'+':''}${fmt(totalReal)}`;
   }else{rpe.style.display='none';}
+  // 계좌별 월 예상 배당 계산
+  function calcMonDiv(acctFilter){
+    return H.filter(h=>h.isDv&&h.dy>0).reduce((s,h)=>{
+      const buys=h.buys||[];
+      let qty=h.qty;
+      if(acctFilter!=='all'&&buys.length){
+        qty=buys.filter(b=>acctFilter==='tax'?b.acct==='tax':b.acct!=='tax').reduce((q,b)=>q+b.qty,0);
+      }
+      if(!qty)return s;
+      const cur=h.cur||h.avg;
+      return s+(cur*qty*h.dy/100)/dvN(h.df);
+    },0);
+  }
+  const mAll=calcMonDiv('all');
+  const mGen=calcMonDiv('general');
+  const mTax=calcMonDiv('tax');
   const de=document.getElementById('hDiv');
-  if(mDiv>0){de.style.display='block';de.textContent=`🪙 월 예상 배당 ${fmt(mDiv)}`;}else de.style.display='none';
+  if(mAll>0){
+    de.style.display='block';
+    de.innerHTML=`
+<div style="display:flex;gap:8px;margin-top:2px">
+  <div onclick="setFlt('all')" style="flex:1;background:linear-gradient(135deg,#1e40af,#2563eb);border-radius:14px;padding:10px 12px;cursor:pointer">
+    <div style="font-size:10px;color:rgba(255,255,255,.7);margin-bottom:3px;font-weight:500">🪙 전체 월 배당</div>
+    <div style="font-size:16px;font-weight:800;color:#fff;letter-spacing:-.3px">${fmt(Math.round(mAll))}</div>
+    <div style="font-size:10px;color:rgba(255,255,255,.6);margin-top:2px">연 ${fmt(Math.round(mAll*12))}</div>
+  </div>
+  <div onclick="setFlt('normal')" style="flex:1;background:#fff;border:1.5px solid #e8e3d8;border-radius:14px;padding:10px 12px;cursor:pointer">
+    <div style="font-size:10px;color:#aaa;margin-bottom:3px;font-weight:500">📂 일반계좌</div>
+    <div style="font-size:16px;font-weight:800;color:#1c1917;letter-spacing:-.3px">${fmt(Math.round(mGen))}</div>
+    <div style="font-size:10px;color:#bbb;margin-top:2px">${mAll>0?Math.round(mGen/mAll*100):0}%</div>
+  </div>
+  <div onclick="setFlt('tax')" style="flex:1;background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:1.5px solid #bbf7d0;border-radius:14px;padding:10px 12px;cursor:pointer">
+    <div style="font-size:10px;color:#16a34a;margin-bottom:3px;font-weight:500">🌿 절세계좌</div>
+    <div style="font-size:16px;font-weight:800;color:#15803d;letter-spacing:-.3px">${fmt(Math.round(mTax))}</div>
+    <div style="font-size:10px;color:#86efac;margin-top:2px">${mAll>0?Math.round(mTax/mAll*100):0}%</div>
+  </div>
+</div>`;
+  }else{
+    de.style.display='none';
+  }
   document.getElementById('hUpd').textContent=D.at?`업데이트 ${D.at} · USD/KRW ${fN(D.rate)}원`:'';
   document.getElementById('frow').style.display=H.length?'flex':'none';
   document.getElementById('sortRow').style.display=H.length?'flex':'none';
