@@ -2448,36 +2448,57 @@ async function fetchOne(id){
 
 // 네이버 시세 직접 조회 (국내주식 최종 fallback)
 async function naverPrice(code){
-  function parseNum(v){if(v==null)return 0;return Math.round(Number(String(v).replace(/,/g,'')));}
-  const c=code.replace(/^A/,'').replace(/\.(KS|KQ)$/,'');
-  const urls=[
-    // fchart - 가장 안정적, JSON 응답
-    `https://fchart.stock.naver.com/sise.nhn?symbol=${c}&timeframe=day&count=1&requestType=0`,
-    // 모바일 기본 API
-    `https://m.stock.naver.com/api/stock/${c}/basic`,
-    // 실시간 폴링 API
-    `https://polling.finance.naver.com/api/realtime/domestic/stock/${c}`,
-    // integration API
-    `https://m.stock.naver.com/api/stock/${c}/integration`,
+  function parseNum(v){if(v==null)return 0;const n=Number(String(v).replace(/,/g,''));return isNaN(n)?0:Math.round(n);}
+  const c=code.replace(/^A/i,'').replace(/\.(KS|KQ)$/,'').padStart(6,'0');
+
+  const proxies=[
+    u=>'https://corsproxy.io/?'+encodeURIComponent(u),
+    u=>'https://api.allorigins.win/raw?url='+encodeURIComponent(u),
+    u=>'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(u),
+    u=>'https://thingproxy.freeboard.io/fetch/'+u,
+    u=>'https://corsproxy.io/?'+encodeURIComponent(u)+'&_='+Date.now(), // 캐시 방지
   ];
+
+  const urls=[
+    `https://fchart.stock.naver.com/sise.nhn?symbol=${c}&timeframe=day&count=1&requestType=0`,
+    `https://polling.finance.naver.com/api/realtime/domestic/stock/${c}`,
+    `https://m.stock.naver.com/api/stock/${c}/basic`,
+    `https://finance.naver.com/item/sise.nhn?code=${c}`, // HTML fallback
+  ];
+
   for(const url of urls){
-    for(const mkP of PROXIES){
+    for(const mkP of proxies){
       try{
-        const r=await fetch(mkP(url),{headers:{Referer:'https://finance.naver.com/'}});
+        const r=await fetch(mkP(url));
         if(!r.ok)continue;
         const text=await r.text();
-        // fchart XML 형식: <item data='날짜|시가|고가|저가|종가|거래량' />
-        const fchart=text.match(/data=['"][\d]+\|[\d]+\|[\d]+\|[\d]+\|([\d]+)\|/);
-        if(fchart){const p=parseNum(fchart[1]);if(p>0)return p;}
-        // JSON 형식
-        const raw=text.startsWith('{"contents"')?JSON.parse(text).contents:text;
-        const j=JSON.parse(raw);
-        const p1=parseNum(j?.closePrice??j?.currentPrice??j?.price??j?.stockPrice??
-                          j?.dealPrice??j?.lastPrice??j?.tradePrice??j?.basePric);
-        if(p1>0)return p1;
-        const res=j?.result||j?.data||{};
-        const p2=parseNum(res?.price??res?.closePrice??res?.현재가??res?.종가);
-        if(p2>0)return p2;
+        if(!text||text.length<10)continue;
+
+        // 1) fchart XML: data='날짜|시가|고가|저가|종가|거래량'
+        const fc=text.match(/data=['"][\d]+\|[\d]+\|[\d]+\|[\d]+\|([\d]+)\|/);
+        if(fc){const p=parseNum(fc[1]);if(p>100)return p;}
+
+        // 2) polling API JSON
+        try{
+          const raw=text.startsWith('{"contents"')?JSON.parse(text).contents:text;
+          const j=JSON.parse(raw);
+          // polling.finance.naver.com
+          const r2=j?.result||j?.data||{};
+          const p2=parseNum(r2?.tradePrice??r2?.closePrice??r2?.price??r2?.현재가);
+          if(p2>100)return p2;
+          // m.stock.naver.com/api/stock/basic
+          const p3=parseNum(j?.closePrice??j?.currentPrice??j?.tradePrice??j?.stockPrice??j?.price);
+          if(p3>100)return p3;
+        }catch{}
+
+        // 3) HTML 파싱 - 네이버 증권 sise 페이지
+        const html1=text.match(/id=["']now_value["'][^>]*>([\d,]+)/);
+        if(html1){const p=parseNum(html1[1]);if(p>100)return p;}
+        const html2=text.match(/<dd class=["']today["'][^>]*>.*?([\d,]+)원/s);
+        if(html2){const p=parseNum(html2[1]);if(p>100)return p;}
+        // 일반적인 숫자 패턴 (종가)
+        const html3=text.match(/현재가[^>]*>[^<]*([\d,]{4,})/);
+        if(html3){const p=parseNum(html3[1]);if(p>100)return p;}
       }catch{}
     }
   }
