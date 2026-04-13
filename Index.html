@@ -196,6 +196,7 @@ body{font-family:-apple-system,'Helvetica Neue',sans-serif;background:#f5f3ee;co
     <div style="font-size:14px;color:#555">아래 버튼으로 종목을 추가하세요</div>
     <div style="font-size:12px;color:#d97706;margin-top:6px">Finnhub 실시간 가격 자동 조회</div>
   </div>
+  <div id="botUpd" style="text-align:center;font-size:11px;color:#ccc;padding:16px 0 8px"></div>
 
 </div>
 
@@ -2066,7 +2067,7 @@ function render(){
   const pe=document.getElementById('hPnl');
   pe.textContent=H.length?`${pnl>=0?'+':''}${fmt(pnl)} (${pct>=0?'+':''}${pct.toFixed(2)}%) 평가손익`:'';
   pe.className='pnl '+(pnl>=0?'pos':'neg');
-  document.getElementById('hSub').textContent=H.length?`일반 ${fmt(nV)} · 배당주 ${fmt(dV)}`:'';
+  document.getElementById('hSub').textContent='';
   const rpe=document.getElementById('hRpnl');
   if(D.sells.length){
     rpe.style.display='block';
@@ -2128,7 +2129,10 @@ function render(){
   }else{
     de.style.display='none';
   }
-  document.getElementById('hUpd').textContent=D.at?`업데이트 ${D.at} · USD/KRW ${fN(D.rate)}원`:'';
+  const updEl=document.getElementById('hUpd');
+  if(updEl)updEl.style.display='none';
+  const botUpd=document.getElementById('botUpd');
+  if(botUpd)botUpd.textContent=D.at?`업데이트 ${D.at} · USD/KRW ${fN(D.rate)}원`:'';
   document.getElementById('frow').style.display=H.length?'flex':'none';
   document.getElementById('sortRow').style.display=H.length?'flex':'none';
   document.getElementById('eEmpty').style.display=H.length?'none':'block';
@@ -2191,9 +2195,8 @@ function render(){
       var spinEl=isLd?'<span class="spin" style="width:14px;height:14px;border-color:rgba(255,255,255,.4);border-top-color:#fff;margin:0"></span>':initials;
       var subTxt=fN(dispQty)+'주'+(usd?' · <span style="color:#2563eb">'+usd+'</span>':'');
 
-      return '<div style="'+border+'" data-id="'+id+'" '+(SORT==='custom'?'draggable="true" class="drag-item"':'')+'>'
-        +(SORT==='custom'?'<div class="drag-handle" style="display:flex;align-items:center;padding:0 8px 0 16px;color:#ccc;font-size:18px;cursor:grab;touch-action:none">⠿</div>':'')
-        +'<button onclick="openBuyHistory('+id+')" style="width:100%;display:flex;align-items:center;gap:14px;padding:18px 16px;border:none;background:none;cursor:pointer;text-align:left;'+(SORT==='custom'?'padding-left:4px':'')+'">'
+      return '<div style="'+border+';display:flex;align-items:center" data-id="'+id+'" '+(SORT==='custom'?'draggable="true" class="drag-item"':'')+'>'
+        +'<button onclick="openBuyHistory('+id+')" style="flex:1;display:flex;align-items:center;gap:14px;padding:18px 16px;border:none;background:none;cursor:pointer;text-align:left">'
           +'<div class="sicon" style="background:'+bg+'">'+spinEl+'</div>'
           +'<div class="sinfo">'
             +'<div class="sname">'+(h.n||'')+dyBadge+acctBadge+'</div>'
@@ -2204,6 +2207,7 @@ function render(){
             +'<div class="spnl" style="color:'+pnlColor+'">'+(pp>=0?'+':'')+fmt(pp)+'<span style="font-size:12px;font-weight:500">('+pp2.toFixed(2)+'%)</span></div>'
           +'</div>'
         +'</button>'
+        +(SORT==='custom'?'<div class="drag-handle" style="display:flex;align-items:center;padding:0 16px 0 4px;color:#ccc;font-size:20px;cursor:grab;touch-action:none;flex-shrink:0">⠿</div>':'')
       +'</div>';
     }).join('') + '</div>';
 
