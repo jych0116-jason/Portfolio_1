@@ -2740,7 +2740,7 @@ function render(){
   <div onclick="setFlt('all')" style="background:linear-gradient(145deg,#1e40af,#3b82f6);border-radius:16px;padding:14px 12px;cursor:pointer;box-shadow:${selAll?'0 0 0 3px #fff,0 0 0 5px #2563eb':'0 4px 14px rgba(37,99,235,.3)'};transition:box-shadow .2s">
     <div style="font-size:10px;color:rgba(255,255,255,.75);font-weight:600;margin-bottom:8px">🪙 전체 <span style="opacity:.7">${cntAll}종목</span></div>
     <div style="font-size:18px;font-weight:800;color:#fff;letter-spacing:-.5px;line-height:1.1">${fmt(Math.round(mAll))}</div>
-    <div style="font-size:10px;color:rgba(255,255,255,.55);margin-top:5px">연 ${fmt(Math.round(mAll*12))}</div>
+    <div style="font-size:10px;color:rgba(255,255,255,.55);margin-top:5px">연 ${fmt(Math.round(mAll*12))} · <span style="opacity:.8">세전</span></div>
   </div>
   <div onclick="setFlt('normal')" style="background:#fff;border:${selNorm?'2.5px solid #2563eb':'1.5px solid #e8e3d8'};border-radius:16px;padding:14px 12px;cursor:pointer;box-shadow:${selNorm?'0 4px 14px rgba(37,99,235,.15)':'none'};transition:all .2s">
     <div style="font-size:10px;color:${selNorm?'#2563eb':'#aaa'};font-weight:600;margin-bottom:8px">📂 일반 <span style="opacity:.7">${cntGen}종목</span></div>
@@ -2880,29 +2880,11 @@ function acctLabel(acct){
 function renderSim(dvH,tV){
   const sc=document.getElementById('simCont');
 
-  // 배당 목표
+  // 배당 목표 — tMAft(월 세후 배당)와 동일한 값 사용
   const goalM=D.goalMon||0;
   const gd=document.getElementById('goalDisp');
-  const mDivTotal=dvH.reduce((s,h)=>{
-    const cur=h.cur||h.avg;
-    const buys=h.buys||[];
-    if(buys.length){
-      const qG=buys.filter(b=>b.acct!=='tax').reduce((a,b)=>a+b.qty,0);
-      const qT=buys.filter(b=>b.acct==='tax').reduce((a,b)=>a+b.qty,0);
-      const annG=cur*qG*h.dy/100, annT=cur*qT*h.dy/100;
-      return s+(annG*0.846+annT)/dvN(h.df);
-    }
-    const ann=cur*h.qty*h.dy/100;
-    return s+(ann/dvN(h.df))*(1-taxRateOf(h));
-  },0);
-  if(goalM>0){
-    const pct=Math.min(mDivTotal/goalM*100,100);
-    gd.innerHTML=`<div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700"><span style="color:#d97706">${fmt(Math.round(mDivTotal))}<span style="font-size:11px;font-weight:400;color:#aaa"> / 월</span></span><span style="color:#aaa">${fmt(goalM)} 목표</span></div>
-<div class="goal-bar-wrap"><div class="goal-bar" style="width:${pct.toFixed(1)}%;background:${pct>=100?'#16a34a':pct>=70?'#d97706':'#2563eb'}"></div></div>
-<div style="font-size:11px;color:#888;text-align:right">${pct.toFixed(1)}% 달성${pct>=100?' 🎉':''}</div>`;
-  }else{
-    gd.innerHTML=`<div style="font-size:12px;color:#bbb;text-align:center;padding:6px 0">월 목표 배당금을 설정해보세요</div>`;
-  }
+  // tMAft는 아래서 계산되므로 여기서 미리 계산
+  let mDivTotal=0; // renderSim 아래에서 ss가 완성된 후 업데이트
 
   if(!dvH.length){sc.innerHTML='<div class="empty"><div style="font-size:36px;margin-bottom:10px">🪙</div><div>배당주를 추가하면 시뮬레이션이 표시됩니다</div></div>';return;}
 
@@ -2979,8 +2961,19 @@ function renderSim(dvH,tV){
 <div class="sgrid">
   ${[['월 세후 배당',fmt(Math.round(tMAft)),'#d97706'],['연 세후 배당',fmt(Math.round(tAAft)),'#2563eb'],['세전 배당수익률',aY.toFixed(2)+'%','#16a34a'],['배당주 평가금액',fmt(tD),'#7c3aed']].map(([l,v,c])=>`<div class="scard"><div class="slbl">${l}</div><div class="sval" style="color:${c}">${v}</div></div>`).join('')}
 </div>
-${acctSummary?`<div class="ccard" style="margin-bottom:10px"><div class="cttl">계좌별 세후 배당</div>${acctSummary}</div>`:''}
-<div class="ccard"><div class="cttl">종목별 월 세후 배당</div>${(()=>{
+${acctSummary?`<div class="ccard" style="margin-bottom:10px"><div class="cttl">계좌별 세후 배당</div>${acctSummary}</div>`:''}`;
+
+  // 목표 달성 업데이트 — tMAft(월 세후 배당)와 동일 기준
+  if(goalM>0){
+    const pct=Math.min(tMAft/goalM*100,100);
+    gd.innerHTML=`<div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700"><span style="color:#d97706">${fmt(Math.round(tMAft))}<span style="font-size:11px;font-weight:400;color:#aaa"> / 월</span></span><span style="color:#aaa">${fmt(goalM)} 목표</span></div>
+<div class="goal-bar-wrap"><div class="goal-bar" style="width:${pct.toFixed(1)}%;background:${pct>=100?'#16a34a':pct>=70?'#d97706':'#2563eb'}"></div></div>
+<div style="font-size:11px;color:#888;text-align:right">${pct.toFixed(1)}% 달성${pct>=100?' 🎉':''}</div>`;
+  }else{
+    gd.innerHTML=`<div style="font-size:12px;color:#bbb;text-align:center;padding:6px 0">월 목표 배당금을 설정해보세요</div>`;
+  }
+
+  sc.innerHTML+=`<div class="ccard"><div class="cttl">종목별 월 세후 배당</div>${(()=>{
   // 종목별 그룹핑 (같은 종목의 일반+절세 합치기)
   const groups={};
   ss.forEach(x=>{
