@@ -628,7 +628,8 @@ const SEARCH_DB=[
   {n:'KODEX 유럽선진국MSCI(H)',s:'195930.KS',dy:1.5,df:'연배당',isDv:true},
   {n:'KODEX 인도Nifty50',s:'453810.KS',dy:0,df:'없음',isDv:false},
   {n:'KODEX 베트남VN30(합성)',s:'245710.KS',dy:0,df:'없음',isDv:false},
-  {n:'KODEX 리츠부동산인프라',s:'441800.KS',dy:5.0,df:'분기배당',isDv:true},
+  {n:'KODEX 미국성장커버드콜액티브',s:'464600.KS',dy:10.0,df:'월배당',isDv:true},
+  {n:'KODEX 미국나스닥커버드콜액티브',s:'464610.KS',dy:10.0,df:'월배당',isDv:true},
   // ── TIGER (미래에셋자산운용) ──
   {n:'TIGER 200',s:'102110.KS',dy:1.5,df:'분기배당',isDv:true},
   {n:'TIGER 코스닥150',s:'233160.KQ',dy:0.5,df:'분기배당',isDv:true},
@@ -2788,6 +2789,19 @@ function pickSearch(n,s,dy,df,isDv){
 }
 function closeDD(){document.getElementById('searchDD').style.display='none';}
 document.addEventListener('click',e=>{if(!e.target.closest('#searchDD')&&e.target.id!=='aName')closeDD();});
+
+// 보유 종목 배당 정보 DB에서 자동 갱신
+(function syncDivInfo(){
+  let changed=false;
+  D.h.forEach(h=>{
+    const db=SEARCH_DB.find(x=>x.s===h.sym||x.n===h.n);
+    if(db&&(h.dy!==db.dy||h.df!==db.df||h.isDv!==db.isDv)){
+      h.dy=db.dy; h.df=db.df; h.isDv=db.isDv;
+      changed=true;
+    }
+  });
+  if(changed)save();
+})();
 
 render();
 initDynDB();
