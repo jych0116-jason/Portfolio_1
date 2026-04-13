@@ -1741,8 +1741,22 @@ function render(){
         qty=buys.filter(b=>acctFilter==='tax'?b.acct==='tax':b.acct!=='tax').reduce((q,b)=>q+b.qty,0);
       }
       if(!qty)return s;
-      const cur=h.cur||h.avg;
-      return s+(cur*qty*h.dy/100)/dvN(h.df);
+
+      let monPerShare;
+      // 실제 배당 내역 있으면 최근 3개월 평균
+      if(h.divHistory&&h.divHistory.length>0){
+        const recent=h.divHistory.slice(0,Math.min(3,h.divHistory.length));
+        const avgPayment=recent.reduce((t,d)=>t+(d.amount||0),0)/recent.length;
+        // 미국 종목이면 원화 변환
+        const payKRW=isKR(h.sym||'')?avgPayment:avgPayment*(D.rate||1380);
+        // 지급주기별 월 환산 (월배당×1, 분기배당÷3, 반기배당÷6)
+        monPerShare=payKRW*dvN(h.df)/12;
+      }else{
+        // 배당 내역 없으면 배당률 기반
+        const cur=h.cur||h.avg;
+        monPerShare=(cur*h.dy/100)/12;
+      }
+      return s+monPerShare*qty;
     },0);
   }
   const mAll=calcMonDiv('all');
@@ -1899,7 +1913,17 @@ function renderSim(dvH,tV){
     ['general','tax'].forEach(acct=>{
       const q=qByAcct[acct]; if(!q)return;
       const val=cur*q;
-      const ann=val*h.dy/100;
+      // 실제 배당 내역 있으면 최근 3개월 평균 사용
+      let monPerShare;
+      if(h.divHistory&&h.divHistory.length>0){
+        const recent=h.divHistory.slice(0,Math.min(3,h.divHistory.length));
+        const avgPayment=recent.reduce((t,d)=>t+(d.amount||0),0)/recent.length;
+        const payKRW=isKR(h.sym||'')?avgPayment:avgPayment*(D.rate||1380);
+        monPerShare=payKRW*dvN(h.df)/12;
+      }else{
+        monPerShare=cur*h.dy/100/12;
+      }
+      const ann=monPerShare*q*12;
       const tx=acct==='tax'?0:0.154;
       ss.push({...h,qty:q,val,ann,annAfter:ann*(1-tx),mon:ann/12,monAfter:ann*(1-tx)/12,pp:ann/dvN(h.df),ppAfter:ann*(1-tx)/dvN(h.df),tx,acct,idx});
     });
