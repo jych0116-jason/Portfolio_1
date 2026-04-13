@@ -331,7 +331,7 @@ body{font-family:-apple-system,'Helvetica Neue',sans-serif;background:#f5f3ee;co
   <div id="ssDropZone" onclick="document.getElementById('ssFileInput').click()" style="border:2px dashed #bfdbfe;border-radius:14px;padding:20px;text-align:center;cursor:pointer;background:#f0f7ff;margin-bottom:12px">
     <div style="font-size:28px;margin-bottom:4px">🖼️</div>
     <div style="font-size:14px;font-weight:700;color:#2563eb">탭해서 스크린샷 선택</div>
-    <div style="font-size:11px;color:#93c5fd;margin-top:2px">최대 3장 · PNG · JPG</div>
+    <div style="font-size:11px;color:#93c5fd;margin-top:2px">최대 5장 · PNG · JPG</div>
   </div>
   <input type="file" id="ssFileInput" accept="image/png,image/jpeg,image/jpg" multiple style="display:none">
   <div id="ssPreviewRow" style="display:none;display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap"></div>
@@ -2822,14 +2822,14 @@ function openSsImport(){
   document.getElementById('ssImportBtn').style.display='none';
   document.getElementById('ssOv').classList.add('show');
   document.getElementById('ssFileInput').onchange=function(e){
-    const files=Array.from(e.target.files||[]).slice(0,3);
+    const files=Array.from(e.target.files||[]).slice(0,5);
     if(!files.length)return;
     SS_FILES=files;
     const row=document.getElementById('ssPreviewRow');
     row.innerHTML=files.map(f=>`<img src="${URL.createObjectURL(f)}" style="height:80px;border-radius:8px;object-fit:cover;flex:1;min-width:0">`).join('');
     row.style.display='flex';
-    document.getElementById('ssDropZone').style.display=files.length<3?'block':'none';
-    document.getElementById('ssDropZone').innerHTML=`<div style="font-size:13px;color:#2563eb;font-weight:600">+ 추가 선택 (${files.length}/3)</div>`;
+    document.getElementById('ssDropZone').style.display=files.length<5?'block':'none';
+    document.getElementById('ssDropZone').innerHTML=`<div style="font-size:13px;color:#2563eb;font-weight:600">+ 추가 선택 (${files.length}/5)</div>`;
     document.getElementById('ssAnalyzeBtn').style.display='block';
     document.getElementById('ssResult').style.display='none';
     document.getElementById('ssImportBtn').style.display='none';
