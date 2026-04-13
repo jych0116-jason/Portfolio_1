@@ -179,8 +179,7 @@ body{font-family:-apple-system,'Helvetica Neue',sans-serif;background:#f5f3ee;co
     <div style="display:flex;background:#f3f2ef;border-radius:12px;padding:4px;gap:2px;width:100%">
       <button class="fp on" id="fAll" onclick="setFlt('all')">전체</button>
       <button class="fp" id="fNorm" onclick="setFlt('normal')">일반</button>
-      <button class="fp" id="fDiv" onclick="setFlt('div')">배당</button>
-      <button class="fp" id="fHigh" onclick="setFlt('high')">고배당</button>
+      <button class="fp" id="fTax" onclick="setFlt('tax')">절세</button>
     </div>
   </div>
   <div id="sortRow" style="display:none;margin-bottom:12px">
@@ -1741,9 +1740,8 @@ function render(){
   document.getElementById('eEmpty').style.display=H.length?'none':'block';
 
   let fil=H.filter(h=>{
-    if(FLT==='normal')return(!h.isDv||!h.dy||h.dy<4);   // 배당없음 + 배당4%미만
-    if(FLT==='div')return h.isDv&&h.dy>=4&&h.dy<10;      // 배당4~10%
-    if(FLT==='high')return h.isDv&&h.dy>=10;              // 배당10%+
+    if(FLT==='normal')return h.acct!=='tax';
+    if(FLT==='tax')return h.acct==='tax';
     return true;
   });
   if(SORT==='val')fil=[...fil].sort((a,b)=>(b.cur||b.avg)*b.qty-(a.cur||a.avg)*a.qty);
@@ -2148,6 +2146,16 @@ function renderHist(){
 }
 
 /* ===== TABS / FILTERS ===== */
+// ESC 키로 열린 모달 닫기
+document.addEventListener('keydown',function(e){
+  if(e.key!=='Escape')return;
+  const modals=['histOv','addOv','buyOv','sellOv','editBuyOv','ssOv','reinvestOv','goalOv'];
+  for(const id of modals){
+    const el=document.getElementById(id);
+    if(el&&el.classList.contains('show')){el.classList.remove('show');break;}
+  }
+});
+
 function toggleMenu(){
   const d=document.getElementById('menuDrop');
   d.style.display=d.style.display==='none'?'block':'none';
@@ -2166,7 +2174,10 @@ function goTab(t){
 }
 function setFlt(f){
   FLT=f;
-  [['All','all'],['Norm','normal'],['Div','div'],['High','high']].forEach(([id,k])=>document.getElementById('f'+id).className='fp'+(f===k?' on':''));
+  [['All','all'],['Norm','normal'],['Tax','tax']].forEach(([id,k])=>{
+    const el=document.getElementById('f'+id);
+    if(el)el.className='fp'+(f===k?' on':'');
+  });
   render();
 }
 function setSort(s){
@@ -2517,7 +2528,10 @@ function importData(e){
 }
 
 /* ===== MISC ===== */
-function openAdd(){document.getElementById('addOv').classList.add('show');}
+function openAdd(){
+  document.getElementById('addOv').classList.add('show');
+  document.getElementById('aDate').value=new Date().toISOString().split('T')[0];
+}
 let _gt=null;
 function showG(m){document.getElementById('gld').style.display='flex';setGMsg(m);if(_gt)clearTimeout(_gt);_gt=setTimeout(forceClose,15000);}
 function setGMsg(m){document.getElementById('gmsg').textContent=m;}
