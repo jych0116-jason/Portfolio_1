@@ -796,7 +796,7 @@ const SEARCH_DB=[
   {n:'TIGER CD금리투자KIS(합성)',s:'',dy:0,df:'없음',isDv:false},
   {n:'KODEX KOFR금리액티브(합성)',s:'',dy:0,df:'없음',isDv:false},
   {n:'TIGER MSCI Korea TR',s:'',dy:0,df:'없음',isDv:false},
-  {n:'TIGER 미국테크TOP10 INDXX',s:'',dy:0,df:'없음',isDv:false},
+  {n:'TIGER 미국테크TOP10 INDXX',s:'381170.KS',dy:0,df:'없음',isDv:false},
   {n:'TIGER KOFR금리액티브(합성)',s:'',dy:0,df:'없음',isDv:false},
   {n:'TIGER 코리아TOP10',s:'',dy:0,df:'없음',isDv:false},
   {n:'KODEX AI반도체',s:'',dy:0,df:'없음',isDv:false},
@@ -824,8 +824,8 @@ const SEARCH_DB=[
   {n:'ACE 종합채권(AA-이상)액티브',s:'',dy:0,df:'없음',isDv:false},
   {n:'KODEX 증권',s:'',dy:0,df:'없음',isDv:false},
   {n:'TIGER 종합채권(AA-이상)액티브',s:'',dy:0,df:'없음',isDv:false},
-  {n:'ACE 미국빅테크TOP7 Plus',s:'',dy:0,df:'없음',isDv:false},
-  {n:'TIGER 200 IT',s:'',dy:0,df:'없음',isDv:false},
+  {n:'ACE 미국빅테크TOP7 Plus',s:'468380.KS',dy:0,df:'없음',isDv:false},
+  {n:'TIGER 200 IT',s:'139240.KS',dy:0,df:'없음',isDv:false},
   {n:'KODEX 로봇액티브',s:'',dy:0,df:'없음',isDv:false},
   {n:'TIGER K방산&우주',s:'',dy:0,df:'없음',isDv:false},
   {n:'KODEX 200액티브',s:'',dy:0,df:'없음',isDv:false},
@@ -973,7 +973,7 @@ const SEARCH_DB=[
   {n:'KODEX TDF2040액티브 적격',s:'',dy:0,df:'없음',isDv:false},
   {n:'TIGER 글로벌혁신블루칩TOP10',s:'',dy:0,df:'없음',isDv:false},
   {n:'SOL 글로벌AI반도체탑픽액티브',s:'',dy:0,df:'없음',isDv:false},
-  {n:'TIGER 200 건설',s:'',dy:0,df:'없음',isDv:false},
+  {n:'TIGER 200 건설',s:'139230.KS',dy:0,df:'없음',isDv:false},
   {n:'SOL 국제금',s:'',dy:0,df:'없음',isDv:false},
   {n:'ACE 포스코그룹포커스',s:'',dy:0,df:'없음',isDv:false},
   {n:'ACE 미국대형가치주액티브',s:'',dy:0,df:'없음',isDv:false},
@@ -1094,7 +1094,7 @@ const SEARCH_DB=[
   {n:'PLUS 200TR',s:'',dy:0,df:'없음',isDv:false},
   {n:'KODEX 차이나AI테크액티브',s:'',dy:0,df:'없음',isDv:false},
   {n:'SOL 코스닥150',s:'',dy:0,df:'없음',isDv:false},
-  {n:'TIGER 200 금융',s:'',dy:0,df:'없음',isDv:false},
+  {n:'TIGER 200 금융',s:'139260.KS',dy:0,df:'없음',isDv:false},
   {n:'HANARO e커머스',s:'',dy:0,df:'없음',isDv:false},
   {n:'TIGER TSMC파운드리밸류체인',s:'',dy:0,df:'없음',isDv:false},
   {n:'HANARO K-뷰티',s:'',dy:0,df:'없음',isDv:false},
@@ -1123,7 +1123,7 @@ const SEARCH_DB=[
   {n:'TIGER 코스닥150IT',s:'',dy:0,df:'없음',isDv:false},
   {n:'ACE 일본TOPIX레버리지(H)',s:'',dy:0,df:'없음',isDv:false},
   {n:'KODEX 국채선물10년',s:'',dy:0,df:'없음',isDv:false},
-  {n:'TIGER 200 에너지화학',s:'',dy:0,df:'없음',isDv:false},
+  {n:'TIGER 200 에너지화학',s:'139250.KS',dy:0,df:'없음',isDv:false},
   {n:'TIGER 차이나HSCEI',s:'',dy:0,df:'없음',isDv:false},
   {n:'KODEX 우량주',s:'',dy:0,df:'없음',isDv:false},
   {n:'ACE 일본Nikkei225(H)',s:'',dy:0,df:'없음',isDv:false},
@@ -1335,7 +1335,7 @@ const SEARCH_DB=[
   {n:'KIWOOM K-2차전지북미공급망',s:'',dy:0,df:'없음',isDv:false},
   {n:'TIGER 단기선진하이일드(합성 H)',s:'',dy:5.0,df:'월배당',isDv:true},
   {n:'TIGER 차이나CSI300인버스(합성)',s:'',dy:0,df:'없음',isDv:false},
-  {n:'TIGER 200 철강소재',s:'',dy:0,df:'없음',isDv:false},
+  {n:'TIGER 200 철강소재',s:'139220.KS',dy:0,df:'없음',isDv:false},
   {n:'ACE 일라이릴리밸류체인',s:'',dy:0,df:'없음',isDv:false},
   {n:'ACE 미국친환경그린테마',s:'',dy:0,df:'없음',isDv:false},
   {n:'KODEX K-뉴딜디지털플러스',s:'',dy:0,df:'없음',isDv:false},
@@ -2667,7 +2667,7 @@ function renderDivHistory(h,id){
       <button onclick="fetchDivs(${id})" style="margin-top:6px;font-size:11px;color:#2563eb;border:none;background:none;cursor:pointer;padding:0">🔄 재조회</button>
     </div>`;
   }
-  const isUS=!isKR(h.sym||'');
+  const isUS=!(isKR(h.sym||'')||isKRName(h.n||''));
   const rate=D.rate||1380;
   // 표시 함수
   function fmtDiv(a){
@@ -2810,7 +2810,7 @@ function render(){
         const recent=h.divHistory.slice(0,Math.min(3,h.divHistory.length));
         const avgPayment=recent.reduce((t,d)=>t+(d.amount||0),0)/recent.length;
         // 미국 종목이면 원화 변환
-        const payKRW=isKR(h.sym||'')?avgPayment:avgPayment*(D.rate||1380);
+        const payKRW=(isKR(h.sym||'')||isKRName(h.n||''))?avgPayment:avgPayment*(D.rate||1380);
         // 지급주기별 월 환산 (월배당×1, 분기배당÷3, 반기배당÷6)
         monPerShare=payKRW*dvN(h.df)/12;
       }else{
@@ -3013,7 +3013,7 @@ function renderSim(dvH,tV){
       if(h.divHistory&&h.divHistory.length>0){
         const recent=h.divHistory.slice(0,Math.min(3,h.divHistory.length));
         const avgPayment=recent.reduce((t,d)=>t+(d.amount||0),0)/recent.length;
-        const payKRW=isKR(h.sym||'')?avgPayment:avgPayment*(D.rate||1380);
+        const payKRW=(isKR(h.sym||'')||isKRName(h.n||''))?avgPayment:avgPayment*(D.rate||1380);
         monPerShare=payKRW*dvN(h.df)/12;
       }else{
         monPerShare=cur*h.dy/100/12;
