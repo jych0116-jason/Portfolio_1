@@ -2911,7 +2911,7 @@ function parseSsText(text){
   }
 
   // 줄 단위 파싱: "N주 · M원" 줄 찾으면 바로 위 줄이 계좌명
-  const pNum=/([\d,]+)\s*주\s*[·・·\-\.]\s*([\d,]+)\s*원/;
+  const pNum=/([\d,]+)\s*주\s*[·・·\-\.•]\s*([\d,]+)\s*원/;
   for(let i=0;i<lines.length;i++){
     const m=lines[i].match(pNum);
     if(!m)continue;
