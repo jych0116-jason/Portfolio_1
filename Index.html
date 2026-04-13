@@ -1577,7 +1577,7 @@ async function fhDivs(sym){
           .map(d=>({date:new Date(d.date*1000).toISOString().split('T')[0],amount:d.amount||0}))
           .filter(d=>d.amount>0)
           .sort((a,b)=>b.date.localeCompare(a.date))
-          .slice(0,12);
+          .slice(0,6);
         if(divArr.length>0)return divArr;
       }catch{}
     }
@@ -1595,7 +1595,7 @@ async function fhDivs(sym){
         // HTML 파싱 - 배당금 테이블
         const rows=[...text.matchAll(/(\d{4}\.\d{2}\.\d{2})[^<]*<[^>]+>[^<]*<[^>]+>([\d,]+)원/g)];
         if(rows.length>0){
-          return rows.slice(0,12).map(m=>({
+          return rows.slice(0,6).map(m=>({
             date:m[1].replace(/\./g,'-'),
             amount:parseInt(m[2].replace(/,/g,''))
           })).filter(d=>d.amount>0);
@@ -1612,7 +1612,7 @@ async function fhDivs(sym){
         const j=await r.json();
         const list=j?.dividendList||j?.list||j||[];
         if(Array.isArray(list)&&list.length>0){
-          return list.slice(0,12).map(d=>({
+          return list.slice(0,6).map(d=>({
             date:d.dividendPaymentDate||d.date||'',
             amount:parseFloat(d.dividend||d.amount||0)
           })).filter(d=>d.amount>0&&d.date);
@@ -1633,7 +1633,7 @@ function estimateDivHistory(h){
   const perPayment=cur*h.dy/100/n; // 지급당 주당 배당금
   const result=[];
   const now=new Date();
-  for(let i=0;i<Math.min(12,n);i++){
+  for(let i=0;i<Math.min(6,n);i++){
     const d=new Date(now);
     d.setMonth(d.getMonth()-(i*(12/n)));
     result.push({
@@ -1666,7 +1666,7 @@ function renderDivHistory(h,id){
   if(h.divHistory==null){
     return`<div style="margin-bottom:12px">
       <button onclick="fetchDivs(${id})" style="width:100%;padding:10px;border-radius:10px;border:1.5px dashed #e8e3d8;background:#f9f8f5;font-size:12px;color:#888;cursor:pointer">
-        📋 직전 12개월 주당 배당 내역 조회
+        📋 최근 6개월 주당 배당 내역 조회
       </button>
     </div>`;
   }
@@ -1715,7 +1715,7 @@ function renderDivHistory(h,id){
   }).join('');
   return`<div style="background:#fff;border:1px solid #e8e3d8;border-radius:10px;padding:10px 12px;margin-bottom:12px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">
-      <span style="font-size:12px;font-weight:700;color:#555">📋 직전 12개월 배당${isEstimated?'<span style="font-size:10px;color:#aaa;font-weight:400;margin-left:5px">(배당률 기반 추정)</span>':''}</span>
+      <span style="font-size:12px;font-weight:700;color:#555">📋 최근 6개월 배당${isEstimated?'<span style="font-size:10px;color:#aaa;font-weight:400;margin-left:5px">(배당률 기반 추정)</span>':''}</span>
       <span style="font-size:12px;font-weight:700;color:#d97706">주당 합계 ${fmtTot(tot)}</span>
     </div>
     <div style="font-size:11px;color:#aaa;margin-bottom:8px">내 수령액 합계 ${fmtTotMy(tot)}</div>
