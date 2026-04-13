@@ -14,7 +14,7 @@ body{font-family:-apple-system,'Helvetica Neue',sans-serif;background:#f5f3ee;co
 .pnl{font-size:13px;font-weight:500;margin-top:2px}
 .pos{color:#16a34a}.neg{color:#dc2626}
 .sub{font-size:11px;color:#aaa;margin-top:2px}
-.mdiv{font-size:12px;color:#d97706;margin-top:2px;display:none}
+.mdiv{font-size:12px;color:#d97706;margin-top:2px;display:none;width:100%}
 .upd{font-size:10px;color:#bbb;margin-top:2px}
 /* realized pnl header */
 .rpnl-hdr{font-size:11px;margin-top:3px;padding:4px 8px;border-radius:6px;display:none;width:fit-content}
@@ -1766,7 +1766,7 @@ function render(){
   if(mAll>0){
     de.style.display='block';
     de.innerHTML=`
-<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px">
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px;width:100%">
   <div onclick="setFlt('all')" style="background:linear-gradient(145deg,#1e40af,#3b82f6);border-radius:16px;padding:14px 12px;cursor:pointer;box-shadow:0 4px 14px rgba(37,99,235,.3)">
     <div style="font-size:10px;color:rgba(255,255,255,.75);font-weight:600;margin-bottom:8px">🪙 전체</div>
     <div style="font-size:18px;font-weight:800;color:#fff;letter-spacing:-.5px;line-height:1.1">${fmt(Math.round(mAll))}</div>
