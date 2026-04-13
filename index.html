@@ -2449,39 +2449,42 @@ async function fetchOne(id){
 }
 
 // 네이버 시세 직접 조회 (국내주식 최종 fallback)
-// 네이버 실시간 시세 JSONP (프록시 없이 직접 호출)
-function naverPriceJsonp(code){
-  const endpoints=[
-    c=>`https://polling.finance.naver.com/api/realtime/domestic/stock/${c}`,
-    c=>`https://m.stock.naver.com/front-api/v1/stock/price?category=stock&stockCode=${c}`,
+// 네이버 시세 직접 fetch (CORS 허용 여부 먼저 확인)
+async function naverPriceDirect(c){
+  const urls=[
+    `https://polling.finance.naver.com/api/realtime/domestic/stock/${c}`,
+    `https://m.stock.naver.com/api/stock/${c}/basic`,
+    `https://fchart.stock.naver.com/sise.nhn?symbol=${c}&timeframe=day&count=1&requestType=0`,
   ];
-  return new Promise(res=>{
-    const c=code.replace(/^A/i,'').replace(/\.(KS|KQ)$/,'').padStart(6,'0');
-    let tried=0;
-    function tryNext(){
-      if(tried>=endpoints.length){res(null);return;}
-      const baseUrl=endpoints[tried++](c);
-      const id='_np_'+Date.now()+'_'+Math.random().toString(36).slice(2,5);
-      const s=document.createElement('script');
-      let done=false;
-      function cleanup(){try{s.parentNode&&s.parentNode.removeChild(s);}catch{}delete window[id];}
-      window[id]=function(data){
-        if(done)return;done=true;cleanup();
-        try{
-          const r=data?.result||data?.data||data||{};
-          const raw=r?.tradePrice||r?.closePrice||r?.price||r?.현재가||
-                    data?.tradePrice||data?.closePrice||data?.price||0;
-          const p=Number(String(raw).replace(/,/g,''));
-          if(p>100){res(Math.round(p));}else{tryNext();}
-        }catch{tryNext();}
-      };
-      s.onerror=()=>{if(!done){done=true;cleanup();tryNext();}};
-      setTimeout(()=>{if(!done){done=true;cleanup();tryNext();}},4000);
-      s.src=`${baseUrl}?callback=${id}&_=${Date.now()}`;
-      document.head.appendChild(s);
-    }
-    tryNext();
-  });
+  function parse(text){
+    const fc=text.match(/data=['"][\d]+\|[\d]+\|[\d]+\|[\d]+\|([\d]+)\|/);
+    if(fc){const p=+fc[1];if(p>100)return p;}
+    try{
+      const raw=text.startsWith('{"contents"')?JSON.parse(text).contents:text;
+      const j=JSON.parse(raw);
+      const r=j?.result||j?.data||{};
+      const v=r?.tradePrice??r?.closePrice??r?.price??j?.closePrice??j?.currentPrice??j?.tradePrice??j?.price;
+      const p=Math.round(Number(String(v??0).replace(/,/g,'')));
+      if(p>100)return p;
+    }catch{}
+    return 0;
+  }
+  for(const url of urls){
+    try{
+      const r=await fetch(url,{signal:AbortSignal.timeout?AbortSignal.timeout(3000):undefined});
+      if(r.ok){const p=parse(await r.text());if(p>100)return p;}
+    }catch{}
+  }
+  return 0;
+}
+
+async function naverPriceJsonp(code){
+  const c=code.replace(/^A/i,'').replace(/\.(KS|KQ)$/,'').padStart(6,'0');
+  // 1) 직접 fetch 시도 (CORS 허용 시 가장 빠름)
+  const direct=await naverPriceDirect(c);
+  if(direct>100)return direct;
+  // 2) CORS 프록시 순차 시도
+  return null;
 }
 
 async function naverPrice(code){
@@ -2820,24 +2823,22 @@ async function fetchRate(){
 
 async function refreshAll(){
   if(LDALL||!D.h.length)return;
-  LDALL=true;setBusy(true);showG('환율(USD/KRW) 조회 중...');
+  LDALL=true;setBusy(true);showG('시세 조회 중...');
   try{
     await fetchRate();
-    for(let i=0;i<D.h.length;i++){
-      const h=D.h[i];
-      setGMsg(`[${i+1}/${D.h.length}] ${h.n} 조회 중...`);
-      LDS.add(h.id);render();
+    // 전체 병렬 조회 (종목당 5초 타임아웃)
+    await Promise.allSettled(D.h.map(async h=>{
+      LDS.add(h.id);
       try{
-        const sym=h.sym||toSym(h.n);
-        // 개별 종목마다 8초 타임아웃
-        const timeout=new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),8000));
+        let sym=h.sym||toSym(h.n);
+        const to=new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),5000));
         let p;
-        if(isKR(sym)){
-          const res=await Promise.race([yahooQuote(sym),timeout]);
-          p=Math.round(res.price);
+        if(isKR(sym)||isKRName(h.n)){
+          if(!isKR(sym)){const f=await findKRSymbol(h.n);if(f)sym=f;}
+          try{const res=await Promise.race([yahooQuote(sym),to]);p=Math.round(res.price);if(res.resolvedSym)sym=res.resolvedSym;}catch{}
+          if(!p){const code=sym.replace(/\.(KS|KQ)$/,'').replace(/^A/,'');p=await naverPrice(code);}
         }else{
-          const r=await Promise.race([fhQuote(sym),timeout]);
-          p=Math.round(r*D.rate);
+          p=Math.round((await Promise.race([fhQuote(sym),to]))*D.rate);
         }
         if(!p||isNaN(p))throw new Error('가격 없음');
         D.h=D.h.map(x=>x.id===h.id?{...x,cur:p,sym,err:0}:x);
@@ -2845,11 +2846,10 @@ async function refreshAll(){
         D.h=D.h.map(x=>x.id===h.id?{...x,err:1}:x);
       }
       LDS.delete(h.id);
-    }
+    }));
     D.at=new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
     save();
   }finally{
-    // 성공/실패 무관 반드시 로딩 해제
     hideG();setBusy(false);LDALL=false;LDS.clear();render();
   }
 }
