@@ -1760,8 +1760,17 @@ function render(){
   document.getElementById('hList').innerHTML = fil.length===0 ? '' :
     '<div style="background:#fff;border-radius:20px;border:1px solid #eeebe4;margin-bottom:8px;overflow:hidden">' +
     fil.map(function(h,fi){
-      var ci=H.indexOf(h), cur=h.cur||h.avg, val=cur*h.qty;
-      var pp=(cur-h.avgCost)*h.qty, pp2=(cur-h.avgCost)/h.avgCost*100;
+      var ci=H.indexOf(h), cur=h.cur||h.avg;
+      // 탭별 수량 계산
+      var dispQty=h.qty;
+      if(FLT==='normal'||FLT==='tax'){
+        var buys=h.buys||[];
+        if(buys.length){
+          dispQty=buys.filter(function(b){return FLT==='tax'?b.acct==='tax':b.acct!=='tax';}).reduce(function(s,b){return s+b.qty;},0);
+        }
+      }
+      var val=cur*dispQty;
+      var pp=(cur-h.avgCost)*dispQty, pp2=(cur-h.avgCost)/h.avgCost*100;
       var ann=h.isDv&&h.dy?val*h.dy/100:0;
       var isLd=LDS.has(h.id);
       var usd=h.sym&&!isKR(h.sym)&&h.cur?'$'+(h.cur/D.rate).toFixed(2):'';
@@ -1774,7 +1783,7 @@ function render(){
       var dyBadge=h.isDv&&h.dy>0?'<span style="font-size:10px;background:#fff7ed;color:#d97706;padding:1px 6px;border-radius:5px;margin-left:5px;font-weight:600">'+h.df+'</span>':'';
       var acctBadge=(h.acct==='tax'||h.acct==='isa'||h.acct==='irp')?'<span style="font-size:10px;background:#f0fdf4;color:#16a34a;padding:1px 5px;border-radius:5px;margin-left:4px;font-weight:600">절세</span>':'';
       var spinEl=isLd?'<span class="spin" style="width:14px;height:14px;border-color:rgba(255,255,255,.4);border-top-color:#fff;margin:0"></span>':initials;
-      var subTxt=fN(h.qty)+'주'+(usd?' · <span style="color:#2563eb">'+usd+'</span>':'');
+      var subTxt=fN(dispQty)+'주'+(usd?' · <span style="color:#2563eb">'+usd+'</span>':'');
 
       return '<div style="'+border+'">'
         +'<button onclick="openBuyHistory('+id+')" style="width:100%;display:flex;align-items:center;gap:14px;padding:18px 16px;border:none;background:none;cursor:pointer;text-align:left">'
