@@ -708,7 +708,7 @@ const SEARCH_DB=[
   {n:'ACE 미국배당다우존스타겟커버드콜',s:'480130.KS',dy:9.0,df:'월배당',isDv:true},
   {n:'ACE 미국나스닥100데일리타겟커버드콜(합성)',s:'483920.KS',dy:11.0,df:'월배당',isDv:true},
   {n:'ACE 미국S&P500데일리타겟커버드콜(합성)',s:'487290.KS',dy:10.0,df:'월배당',isDv:true},
-  {n:'ACE 미국배당퀄리티+커버드콜액티브',s:'494960.KS',dy:9.0,df:'월배당',isDv:true},
+  {n:'ACE 미국배당퀄리티+커버드콜액티브',s:'0049M0.KS',dy:9.0,df:'월배당',isDv:true},
   {n:'ACE KRX금융고배당TOP10타겟위클리커버드콜',s:'493290.KS',dy:12.0,df:'월배당',isDv:true},
   {n:'ACE 미국빅테크TOP7Plus',s:'468380.KS',dy:0,df:'없음',isDv:false},
   {n:'ACE 미국반도체',s:'448290.KS',dy:0.5,df:'분기배당',isDv:true},
@@ -2595,7 +2595,31 @@ async function naverPrice(code){
 }
 
 async function findKRSymbol(name){
-  // 1) 네이버 자동완성 API (가장 빠름)
+  function bestHit(items, name){
+    // 정확 일치 우선, 그 다음 시작 일치
+    const exact=items.find(x=>x[0]===name);
+    if(exact)return exact;
+    const starts=items.find(x=>x[0].startsWith(name.slice(0,10)));
+    if(starts)return starts;
+    return items[0]||null;
+  }
+  function codeToSym(code, mkt){
+    if(!code)return null;
+    const ext=(mkt==='KOSDAQ'||mkt==='NXT')?'.KQ':'.KS';
+    if(/^[A-Z0-9]{5,7}$/i.test(code))return code.toUpperCase()+ext;
+    if(/^\d{6}$/.test(code))return code+ext;
+    return null;
+  }
+
+  // 1) 네이버 AC JSONP (프록시 없이 직접)
+  try{
+    const data=await naverACJsonp(name,10);
+    const items=(data?.items||[]).flat();
+    const hit=bestHit(items,name);
+    if(hit){const s=codeToSym(hit[1]);if(s)return s;}
+  }catch{}
+
+  // 2) 네이버 AC 프록시
   try{
     const url='https://ac.finance.naver.com/ac?q='+encodeURIComponent(name)+'&q_enc=UTF-8&st=111&sug_typ=1&r_format=json&r_enc=UTF-8&r_lt=10&r_unicode=1&r_escape=1';
     for(const mkP of PROXIES){
@@ -2605,18 +2629,13 @@ async function findKRSymbol(name){
         const raw=text.startsWith('{"contents"')?JSON.parse(text).contents:text;
         const j=JSON.parse(raw);
         const items=(j.items||[]).flat();
-        // 이름 일치 항목 찾기
-        const hit=items.find(x=>x[0]===name||x[0].includes(name.slice(0,8)));
-        if(hit){
-          const code=hit[1];
-          // 코드가 숫자/알파벳 혼합이면 .KS
-          if(/^[A-Z0-9]{6,7}$/i.test(code))return code+'.KS';
-          if(/^\d{6}$/.test(code))return code+'.KS';
-        }
+        const hit=bestHit(items,name);
+        if(hit){const s=codeToSym(hit[1]);if(s)return s;}
       }catch{}
     }
   }catch{}
-  // 2) 네이버 모바일 검색 API
+
+  // 3) 네이버 모바일 검색
   try{
     const url='https://m.stock.naver.com/api/search/all?keyword='+encodeURIComponent(name)+'&page=0&pageSize=5';
     for(const mkP of PROXIES){
@@ -2625,18 +2644,15 @@ async function findKRSymbol(name){
         const j=await r.json();
         const stocks=j?.result?.stock||[];
         const hit=stocks.find(x=>x.name===name||x.itemName===name)||stocks[0];
-        if(hit){
-          const code=hit.code||hit.itemCode;
-          const mkt=hit.market||'KOSPI';
-          return code+(mkt==='KOSDAQ'?'.KQ':'.KS');
-        }
+        if(hit){const s=codeToSym(hit.code||hit.itemCode,hit.market);if(s)return s;}
       }catch{}
     }
   }catch{}
-  // 3) Yahoo Finance 검색 (마지막 수단)
+
+  // 4) Yahoo Finance 검색
   try{
     const url='https://query1.finance.yahoo.com/v1/finance/search?q='+encodeURIComponent(name)+'&lang=ko&region=KR&quotesCount=5&newsCount=0';
-    for(const mkP of [u=>u,...PROXIES]){
+    for(const mkP of[u=>u,...PROXIES]){
       try{
         const r=await fetch(mkP(url));if(!r.ok)continue;
         const text=await r.text();
@@ -4566,6 +4582,10 @@ document.addEventListener('mousedown',e=>{
       h.sym=''; changed=true;
     }
 
+    // 알려진 잘못된 코드 교정
+    const symFixes={'494960.KS':'0049M0.KS'};
+    if(h.sym&&symFixes[h.sym]){h.sym=symFixes[h.sym];changed=true;}
+
     // 심볼 교정: DB에 있고 현재 sym이 비어있을 때만 업데이트
     if(!h.sym){
       const dbBySym=SEARCH_DB.find(x=>x.n===h.n&&x.s);
@@ -4587,22 +4607,26 @@ render();
 initDynDB();
 fetchRate();
 
-// 보유 종목 중 심볼 없는 것들 백그라운드에서 자동 탐색 (최초 1회)
+// 보유 종목 심볼 백그라운드 자동 검증/탐색
 (async function prefetchSymbols(){
-  const missing=D.h.filter(h=>!h.sym&&h.n&&isKRName(h.n));
-  if(!missing.length)return;
+  // 1) 심볼 없는 국내 종목
+  // 2) 시세 조회 실패한 국내 종목 (심볼이 틀렸을 가능성)
+  const targets=D.h.filter(h=>
+    isKRName(h.n)&&(!h.sym||(h.err&&h.sym))
+  );
+  if(!targets.length)return;
   let changed=false;
-  for(const h of missing){
+  for(const h of targets){
     try{
       const sym=await findKRSymbol(h.n);
-      if(sym){
-        D.h=D.h.map(x=>x.id===h.id?{...x,sym}:x);
+      if(sym&&sym!==h.sym){
+        D.h=D.h.map(x=>x.id===h.id?{...x,sym,err:0}:x);
         changed=true;
       }
     }catch{}
-    await new Promise(r=>setTimeout(r,200)); // 요청 간격
+    await new Promise(r=>setTimeout(r,300));
   }
-  if(changed){save();}
+  if(changed){save();render();}
 })();
 </script>
 <script>
