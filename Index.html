@@ -2957,8 +2957,8 @@ function parseSsText(text){
     seen.add(k);
 
     const name=topName||acctSrc||'종목';
-    const db=getAllDB().find(x=>topTicker?(x.s===topTicker||x.n===topTicker):(topName&&(x.n===topName||(topName.length>4&&x.n.includes(topName)))));
-    results.push({name:db?db.n:name.slice(0,30),qty,avgPrice:price,acct,db,isUSD,rawUsdPrice:isUSD?rawPrice:null});
+    const db=getAllDB().find(x=>topTicker?(x.s===topTicker||x.n===topTicker):(topName&&(x.n===topName||(topName.length>4&&topName.startsWith(x.n)&&x.n.length===topName.length))))
+      ||getAllDB().find(x=>!topTicker&&topName&&topName.length>4&&x.n===topName);    results.push({name:db?db.n:name.slice(0,30),qty,avgPrice:price,acct,db,isUSD,rawUsdPrice:isUSD?rawPrice:null});
   }
 
   // 보유량+평단가 형식 (결과 없을 때만)
