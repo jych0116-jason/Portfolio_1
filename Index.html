@@ -1554,29 +1554,95 @@ async function resolveKoreanName(code){
   return null;
 }
 async function fhDivs(sym){
-  // Yahoo Finance 배당 데이터 (국내외 모두)
-  const url=`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1mo&range=2y&events=dividends`;
-  for(const mkP of [u=>u,...PROXIES]){
-    try{
-      const r=await fetch(mkP(url));
-      if(!r.ok)continue;
-      const text=await r.text();
-      const j=JSON.parse(text.startsWith('{"contents"')?JSON.parse(text).contents:text);
-      const divEvents=j?.chart?.result?.[0]?.events?.dividends;
-      if(!divEvents)return[];
-      // {timestamp: {amount, date}} 형식
-      const divArr=Object.values(divEvents)
-        .map(d=>({
-          date:new Date(d.date*1000).toISOString().split('T')[0],
-          amount:d.amount||0
-        }))
-        .filter(d=>d.amount>0)
-        .sort((a,b)=>b.date.localeCompare(a.date))
-        .slice(0,12);
-      if(divArr.length>0)return divArr;
-    }catch{}
+  // 시도할 심볼 목록 (A 접두사 양방향)
+  const syms=[sym];
+  const code=sym.split('.')[0], ext=sym.split('.')[1];
+  if(ext==='KS'||ext==='KQ'){
+    if(/^A/i.test(code)) syms.push(code.slice(1)+'.'+ext);
+    else syms.push('A'+code+'.'+ext);
   }
+
+  // 1) Yahoo Finance 시도
+  for(const s of syms){
+    const url=`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(s)}?interval=1mo&range=2y&events=dividends`;
+    for(const mkP of [u=>u,...PROXIES]){
+      try{
+        const r=await fetch(mkP(url));
+        if(!r.ok)continue;
+        const text=await r.text();
+        const j=JSON.parse(text.startsWith('{"contents"')?JSON.parse(text).contents:text);
+        const divEvents=j?.chart?.result?.[0]?.events?.dividends;
+        if(!divEvents)continue;
+        const divArr=Object.values(divEvents)
+          .map(d=>({date:new Date(d.date*1000).toISOString().split('T')[0],amount:d.amount||0}))
+          .filter(d=>d.amount>0)
+          .sort((a,b)=>b.date.localeCompare(a.date))
+          .slice(0,12);
+        if(divArr.length>0)return divArr;
+      }catch{}
+    }
+  }
+
+  // 2) 네이버 증권 배당 API 시도 (한국 ETF/주식)
+  const krCode=code.replace(/^A/i,'').padStart(6,'0');
+  if(ext==='KS'||ext==='KQ'){
+    const naverUrl=`https://finance.naver.com/item/sise_div.naver?code=${krCode}`;
+    for(const mkP of PROXIES){
+      try{
+        const r=await fetch(mkP(naverUrl));
+        if(!r.ok)continue;
+        const text=await r.text();
+        // HTML 파싱 - 배당금 테이블
+        const rows=[...text.matchAll(/(\d{4}\.\d{2}\.\d{2})[^<]*<[^>]+>[^<]*<[^>]+>([\d,]+)원/g)];
+        if(rows.length>0){
+          return rows.slice(0,12).map(m=>({
+            date:m[1].replace(/\./g,'-'),
+            amount:parseInt(m[2].replace(/,/g,''))
+          })).filter(d=>d.amount>0);
+        }
+      }catch{}
+    }
+
+    // 3) 네이버 모바일 배당 API
+    const mobileUrl=`https://m.stock.naver.com/api/stock/${krCode}/dividend`;
+    for(const mkP of [u=>u,...PROXIES]){
+      try{
+        const r=await fetch(mkP(mobileUrl));
+        if(!r.ok)continue;
+        const j=await r.json();
+        const list=j?.dividendList||j?.list||j||[];
+        if(Array.isArray(list)&&list.length>0){
+          return list.slice(0,12).map(d=>({
+            date:d.dividendPaymentDate||d.date||'',
+            amount:parseFloat(d.dividend||d.amount||0)
+          })).filter(d=>d.amount>0&&d.date);
+        }
+      }catch{}
+    }
+  }
+
   return[];
+}
+
+// Yahoo 데이터 없는 한국 ETF → 배당률 기반 추정값 생성
+function estimateDivHistory(h){
+  if(!h.isDv||!h.dy||h.dy<=0)return[];
+  const cur=h.cur||h.avg;
+  if(!cur)return[];
+  const n=dvN(h.df); // 연간 지급 횟수
+  const perPayment=cur*h.dy/100/n; // 지급당 주당 배당금
+  const result=[];
+  const now=new Date();
+  for(let i=0;i<Math.min(12,n);i++){
+    const d=new Date(now);
+    d.setMonth(d.getMonth()-(i*(12/n)));
+    result.push({
+      date:d.toISOString().split('T')[0],
+      amount:perPayment,
+      estimated:true
+    });
+  }
+  return result;
 }
 
 async function fetchDivs(id){
@@ -1584,11 +1650,14 @@ async function fetchDivs(id){
   LDS.add(id);render();
   try{
     const sym=h.sym||toSym(h.n);
-    const divs=await fhDivs(sym);
+    let divs=await fhDivs(sym);
+    // Yahoo 데이터 없으면 배당률 기반 추정
+    if(!divs.length&&h.isDv&&h.dy>0){
+      divs=estimateDivHistory(h);
+    }
     D.h=D.h.map(x=>x.id===id?{...x,divHistory:divs,divErr:0}:x);save();
   }catch{D.h=D.h.map(x=>x.id===id?{...x,divHistory:[],divErr:1}:x);}
   LDS.delete(id);render();
-  // 모달이 열려있으면 배당 내역 갱신
   if(document.getElementById('histOv').classList.contains('show'))openBuyHistory(id);
 }
 
@@ -1627,6 +1696,7 @@ function renderDivHistory(h,id){
     return fmt(Math.round(tot*h.qty));
   }
 
+  const isEstimated=h.divHistory.some(d=>d.estimated);
   const tot=h.divHistory.reduce((s,d)=>s+(d.amount||0),0);
   const maxA=Math.max(...h.divHistory.map(d=>d.amount||0),0.0001);
   const rows=h.divHistory.map(d=>{
@@ -1645,7 +1715,7 @@ function renderDivHistory(h,id){
   }).join('');
   return`<div style="background:#fff;border:1px solid #e8e3d8;border-radius:10px;padding:10px 12px;margin-bottom:12px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">
-      <span style="font-size:12px;font-weight:700;color:#555">📋 직전 12개월 배당</span>
+      <span style="font-size:12px;font-weight:700;color:#555">📋 직전 12개월 배당${isEstimated?'<span style="font-size:10px;color:#aaa;font-weight:400;margin-left:5px">(배당률 기반 추정)</span>':''}</span>
       <span style="font-size:12px;font-weight:700;color:#d97706">주당 합계 ${fmtTot(tot)}</span>
     </div>
     <div style="font-size:11px;color:#aaa;margin-bottom:8px">내 수령액 합계 ${fmtTotMy(tot)}</div>
