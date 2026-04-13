@@ -1565,18 +1565,37 @@ function renderDivHistory(h,id){
       <button onclick="fetchDivs(${id})" style="margin-top:6px;font-size:11px;color:#2563eb;border:none;background:none;cursor:pointer;padding:0">🔄 재조회</button>
     </div>`;
   }
+  const isUS=!isKR(h.sym||'');
+  const rate=D.rate||1380;
+  // 표시 함수
+  function fmtDiv(a){
+    if(isUS) return '$'+a.toFixed(4).replace(/0+$/,'').replace(/\.$/,'');
+    return fN(Math.round(a))+'원';
+  }
+  function fmtMyDiv(a){
+    if(isUS) return '$'+( a*h.qty ).toFixed(2);
+    return fmt(Math.round(a*h.qty));
+  }
+  function fmtTot(tot){
+    if(isUS) return '$'+tot.toFixed(4).replace(/0+$/,'').replace(/\.$/,'');
+    return fN(Math.round(tot))+'원';
+  }
+  function fmtTotMy(tot){
+    if(isUS) return '$'+(tot*h.qty).toFixed(2)+' (≈'+fmt(Math.round(tot*h.qty*rate))+')';
+    return fmt(Math.round(tot*h.qty));
+  }
+
   const tot=h.divHistory.reduce((s,d)=>s+(d.amount||0),0);
-  const maxA=Math.max(...h.divHistory.map(d=>d.amount||0),1);
+  const maxA=Math.max(...h.divHistory.map(d=>d.amount||0),0.0001);
   const rows=h.divHistory.map(d=>{
     const a=d.amount||0;
     const barW=Math.round(a/maxA*100);
-    const myDiv=Math.round(a*h.qty);
     return`<div style="padding:7px 0;border-top:1px solid #f3f3f1">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
         <span style="font-size:12px;color:#666;font-weight:500">${d.date||''}</span>
         <div style="text-align:right">
-          <span style="font-size:12px;font-weight:700;color:#d97706">${fN(Math.round(a))}원</span>
-          <span style="font-size:11px;color:#aaa;margin-left:6px">→ 내 배당 ${fmt(myDiv)}</span>
+          <span style="font-size:12px;font-weight:700;color:#d97706">${fmtDiv(a)}</span>
+          <span style="font-size:11px;color:#aaa;margin-left:6px">→ 내 배당 ${fmtMyDiv(a)}</span>
         </div>
       </div>
       <div style="height:4px;background:#f3f3f1;border-radius:2px"><div style="height:4px;background:#d97706;border-radius:2px;width:${barW}%"></div></div>
@@ -1585,9 +1604,9 @@ function renderDivHistory(h,id){
   return`<div style="background:#fff;border:1px solid #e8e3d8;border-radius:10px;padding:10px 12px;margin-bottom:12px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">
       <span style="font-size:12px;font-weight:700;color:#555">📋 직전 12개월 배당</span>
-      <span style="font-size:12px;font-weight:700;color:#d97706">주당 합계 ${fN(Math.round(tot))}원</span>
+      <span style="font-size:12px;font-weight:700;color:#d97706">주당 합계 ${fmtTot(tot)}</span>
     </div>
-    <div style="font-size:11px;color:#aaa;margin-bottom:8px">내 수령액 합계 ${fmt(Math.round(tot*h.qty))}</div>
+    <div style="font-size:11px;color:#aaa;margin-bottom:8px">내 수령액 합계 ${fmtTotMy(tot)}</div>
     ${rows}
     <button onclick="fetchDivs(${id})" style="margin-top:8px;font-size:10px;color:#aaa;border:none;background:none;cursor:pointer;padding:0">🔄 재조회</button>
   </div>`;
