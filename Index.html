@@ -171,8 +171,7 @@ body{font-family:-apple-system,'Helvetica Neue',sans-serif;background:#f5f3ee;co
   <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)">
   <div style="display:flex;gap:8px;margin-top:10px">
     <button onclick="openAdd()" style="flex:1;padding:12px;border:none;border-radius:10px;background:#2563eb;color:#fff;font-size:14px;font-weight:700;cursor:pointer">+ 종목 추가</button>
-    <button class="rfbtn on" id="rfBtn" onclick="refreshAll()" style="margin-top:0;width:auto;padding:12px 14px;flex-shrink:0;font-size:12px">🔄 업데이트</button>
-    <button id="autoRefBtn" onclick="toggleAutoRef()" style="margin-top:0;width:auto;padding:12px 10px;flex-shrink:0;font-size:11px;border-radius:12px;cursor:pointer;font-weight:600;transition:all .2s">▶ 자동</button>
+    
   </div>
 </div>
 
@@ -2772,133 +2771,12 @@ async function refreshAll(){
   }
 }
 
-// ── 자동 시세 갱신 (장중, 카운트다운 표시) ──
-let _autoRefTimer=null, _autoRefCdTimer=null, _autoRefCd=0;
-const AUTO_REF_SEC=10;
-
-function isMarketOpen(){
-  const now=new Date();
-  const kst=new Date(now.toLocaleString('en-US',{timeZone:'Asia/Seoul'}));
-  const day=kst.getDay();
-  if(day===0||day===6)return false;
-  const t=kst.getHours()*60+kst.getMinutes();
-  return t>=9*60&&t<15*60+30;
-}
-
-function startAutoRefresh(){
-  if(_autoRefTimer)return;
-  _autoRefCd=AUTO_REF_SEC;
-  updateAutoRefUI();
-  _autoRefCdTimer=setInterval(()=>{
-    if(document.hidden){_autoRefCd=AUTO_REF_SEC;updateAutoRefUI();return;}
-    if(!isMarketOpen()){_autoRefCd=AUTO_REF_SEC;updateAutoRefUI();return;}
-    _autoRefCd--;
-    updateAutoRefUI();
-    if(_autoRefCd<=0){
-      _autoRefCd=AUTO_REF_SEC;
-      silentRefresh();
-    }
-  },1000);
-  _autoRefTimer=true;
-  updateAutoRefUI();
-}
-
-function stopAutoRefresh(){
-  if(_autoRefCdTimer){clearInterval(_autoRefCdTimer);_autoRefCdTimer=null;}
-  _autoRefTimer=null; _autoRefCd=0;
-  updateAutoRefUI();
-}
-
-function toggleAutoRef(){
-  _autoRefTimer?stopAutoRefresh():startAutoRefresh();
-}
-
-function updateAutoRefUI(){
-  const btn=document.getElementById('autoRefBtn');
-  if(!btn)return;
-  const on=!!_autoRefTimer;
-  const mktOpen=isMarketOpen();
-  if(!on){
-    btn.textContent='▶ 자동갱신';
-    btn.style.cssText='margin-top:0;width:auto;padding:12px 10px;flex-shrink:0;font-size:11px;border-radius:12px;cursor:pointer;font-weight:600;transition:all .2s;background:#f3f4f6;color:#888;border:1.5px solid #e5e7eb';
-  }else if(!mktOpen){
-    btn.textContent='⏸ 장마감';
-    btn.style.cssText='margin-top:0;width:auto;padding:12px 10px;flex-shrink:0;font-size:11px;border-radius:12px;cursor:pointer;font-weight:600;transition:all .2s;background:#f3f4f6;color:#aaa;border:1.5px solid #e5e7eb;opacity:.6';
-  }else{
-    btn.textContent='⏸ '+_autoRefCd+'s';
-    btn.style.cssText='margin-top:0;width:auto;padding:12px 10px;flex-shrink:0;font-size:11px;border-radius:12px;cursor:pointer;font-weight:600;transition:none;background:#dcfce7;color:#16a34a;border:1.5px solid #86efac';
-  }
-}
-
-// 깜빡임 없는 조용한 시세 업데이트
-async function silentRefresh(){
+// ── 자동 시세 갱신 (10초마다, 화면 보는 동안) ──
+setInterval(async()=>{
+  if(document.hidden)return;
   if(LDALL||!D.h.length)return;
-  try{
-    await fetchRate();
-    for(const h of D.h){
-      try{
-        let sym=h.sym||toSym(h.n);
-        let p;
-        const timeout=new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),7000));
-        if(isKR(sym)||(isKRName(h.n))){
-          if(!isKR(sym)){const f=await findKRSymbol(h.n);if(f)sym=f;}
-          const res=await Promise.race([yahooQuote(sym),timeout]);
-          p=Math.round(res.price);
-          if(res.resolvedSym&&res.resolvedSym!==sym)sym=res.resolvedSym;
-        }else{
-          p=Math.round((await Promise.race([fhQuote(sym),timeout]))*D.rate);
-        }
-        if(!p||isNaN(p))continue;
-        // D.h 업데이트
-        D.h=D.h.map(x=>x.id===h.id?{...x,cur:p,sym,err:0}:x);
-        // DOM 직접 업데이트 (재렌더 없이)
-        const card=document.querySelector('#hList [data-id="'+h.id+'"]');
-        if(card){
-          const cur=p, avgCost=h.avgCost||h.avg, qty=h.qty;
-          const dispQty=(()=>{
-            if(FLT==='all')return qty;
-            const buys=h.buys||[];
-            if(!buys.length)return qty;
-            return buys.filter(b=>FLT==='tax'?b.acct==='tax':b.acct!=='tax').reduce((s,b)=>s+b.qty,0);
-          })();
-          const val=cur*dispQty;
-          const pp=(cur-avgCost)*dispQty;
-          const pp2=avgCost?((cur-avgCost)/avgCost*100):0;
-          const pnlColor=pp>=0?'#16a34a':'#dc2626';
-          const valEl=card.querySelector('.sval2');
-          const pnlEl=card.querySelector('.spnl');
-          if(valEl)valEl.textContent=fmt(val);
-          if(pnlEl){
-            pnlEl.style.color=pnlColor;
-            pnlEl.innerHTML=(pp>=0?'+':'')+fmt(pp)+'<span style="font-size:12px;font-weight:500">('+pp2.toFixed(2)+'%)</span>';
-          }
-        }
-      }catch{}
-    }
-    D.at=new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
-    save();
-    // 헤더(총자산/손익)만 조용히 업데이트
-    _updateHeaderOnly();
-  }catch{}
-}
-
-function _updateHeaderOnly(){
-  const H=D.h;
-  const tV=H.reduce((s,h)=>(h.cur||h.avg)*h.qty+s,0);
-  const tC=H.reduce((s,h)=>h.avgCost*h.qty+s,0);
-  const pnl=tV-tC, pct=tC>0?pnl/tC*100:0;
-  const tvEl=document.getElementById('hTotal');
-  const pnlEl=document.getElementById('hPnl');
-  if(tvEl)tvEl.textContent=fmt(tV);
-  if(pnlEl){
-    pnlEl.style.color=pnl>=0?'#16a34a':'#dc2626';
-    pnlEl.textContent=(pnl>=0?'+':'')+fmt(pnl)+' ('+pct.toFixed(2)+'%) 평가손익';
-  }
-  const botUpd=document.getElementById('botUpd');
-  if(botUpd)botUpd.textContent=D.at?`업데이트 ${D.at} · USD/KRW ${fN(D.rate)}원`:'';
-}
-
-document.addEventListener('visibilitychange',updateAutoRefUI);
+  await silentRefresh();
+},10000);
 
 /* ===== RENDER ===== */
 function render(){
