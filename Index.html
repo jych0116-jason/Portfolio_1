@@ -2975,24 +2975,72 @@ function renderSsParsed(rawBox){
 
 function confirmSsImport(){
   if(!SS_PARSED.length)return;
-  let added=0;
+  const today=new Date().toISOString().split('T')[0];
+
+  // 종목명 기준 그룹핑
+  const groups={};
   SS_PARSED.forEach(x=>{
-    if(!x.name||!x.qty||!x.avgPrice)return;
-    const db=x.db;
-    const id=Date.now()+added*7+Math.floor(Math.random()*999);
-    const sym=db?db.s:toSym(x.name);
-    D.h.push({
-      id,n:db?db.n:x.name,sym,avg:x.avgPrice,avgCost:x.avgPrice,qty:x.qty,
-      cur:x.avgPrice,dy:db?db.dy||0:0,df:db?db.df||'없음':'없음',
-      isDv:db?db.isDv||false:false,err:0,divHistory:undefined,
-      acct:x.acct||'general',memo:'',
-      buys:[{id:id+'_0',qty:x.qty,price:x.avgPrice,date:new Date().toISOString().split('T')[0],acct:x.acct||'general'}]
-    });
-    added++;
+    const key=x.name;
+    if(!groups[key])groups[key]={name:x.name,db:x.db,items:[]};
+    groups[key].items.push(x);
   });
+
+  let added=0;
+  Object.values(groups).forEach(g=>{
+    const items=g.items;
+    const db=g.db;
+
+    // 총 수량 & 가중평균 단가
+    const totalQty=items.reduce((s,x)=>s+x.qty,0);
+    const avgPrice=Math.round(items.reduce((s,x)=>s+x.qty*x.avgPrice,0)/totalQty);
+
+    // 기존 보유 종목 확인 (이미 있으면 추가매수로)
+    const existing=D.h.find(h=>h.n===g.name||(db&&h.sym===db.s));
+
+    if(existing){
+      // 추가매수로 buys 배열에 추가
+      items.forEach(x=>{
+        existing.buys=existing.buys||[];
+        existing.buys.push({
+          id:Date.now()+Math.floor(Math.random()*9999),
+          qty:x.qty, price:x.avgPrice, date:today, acct:x.acct
+        });
+      });
+      // 평균단가/수량 재계산
+      const allBuys=existing.buys;
+      const newQty=allBuys.reduce((s,b)=>s+b.qty,0);
+      const newAvg=Math.round(allBuys.reduce((s,b)=>s+b.qty*b.price,0)/newQty);
+      existing.qty=newQty;
+      existing.avg=newAvg;
+      existing.avgCost=newAvg;
+    }else{
+      // 신규 종목 추가
+      const id=Date.now()+added*13+Math.floor(Math.random()*999);
+      const sym=db?db.s:'';
+      const buys=items.map((x,i)=>({
+        id:id+'_'+i, qty:x.qty, price:x.avgPrice, date:today, acct:x.acct
+      }));
+      // acct는 일반이 있으면 일반, 전부 절세면 절세
+      const hasGeneral=items.some(x=>x.acct==='general');
+      D.h.push({
+        id, n:g.name, sym, avg:avgPrice, avgCost:avgPrice,
+        qty:totalQty, cur:avgPrice,
+        dy:db?db.dy||0:0, df:db?db.df||'없음':'없음',
+        isDv:db?db.isDv||false:false,
+        err:0, divHistory:undefined,
+        acct:hasGeneral?'general':'tax',
+        memo:'', buys
+      });
+      added++;
+    }
+  });
+
   save();render();
   closeSsModal();
-  D.h.slice(-added).forEach((h,i)=>{if(h.sym)setTimeout(()=>fetchOne(h.id),i*400);});
+  // 신규 추가된 종목들 가격 조회
+  D.h.slice(-added).forEach((h,i)=>{
+    if(h.sym)setTimeout(()=>fetchOne(h.id),i*400);
+  });
 }
 </script>
 </body>
